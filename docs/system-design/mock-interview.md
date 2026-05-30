@@ -1,7 +1,7 @@
 # Peak Booking System — System Design (Mock Interview Style)
 
 > **문서 목적**
-> 현재 `docs/requirements.md`에 명시된 요구사항만 기준으로 시스템 설계를 쉽게 설명하는 작업 문서다. 요구사항에 없는 항목은 확정하지 않고 `Open Questions` 또는 `DECISIONS.md`의 미결정 쟁점으로 보낸다.
+> 현재 `docs/requirements.md`에 명시된 요구사항만 기준으로 시스템 설계를 쉽게 설명하는 작업 문서다. 요구사항에 없는 항목은 확정하지 않고 미결정 질문 또는 `DECISIONS.md`의 미결정 쟁점으로 보낸다.
 
 ---
 
@@ -9,17 +9,17 @@
 
 | 항목 | 값 |
 |---|---|
-| Topic | Limited-stock booking/payment backend |
-| Reviewer Persona | Backend/System Design reviewer |
-| Date | 2026-05-30 |
-| Requirement Source | `docs/requirements.md` |
-| Decision Rule | 기술 선택의 최종 권한자는 user이며, 이 문서는 임의로 결정을 확정하지 않는다. |
+| 주제 | 한정 재고 booking/payment backend |
+| 리뷰 관점 | Backend/System Design reviewer |
+| 날짜 | 2026-05-30 |
+| 요구사항 출처 | `docs/requirements.md` |
+| 결정 규칙 | 기술 선택의 최종 권한자는 user이며, 이 문서는 임의로 결정을 확정하지 않는다. |
 
 ---
 
-## 1. Clarifying Questions
+## 1. 요구사항 확인
 
-### 1.1 Functional Requirements From Current Requirements
+### 1.1 현재 요구사항에서 확인한 기능 요구사항
 
 - [x] FR-1: 사용자는 주문서 진입 시 상품명, 가격, 입/퇴실 시간, 가용 Y포인트 등 checkout 정보를 조회할 수 있다.
 - [x] FR-2: 사용자는 주문서 정보를 제출해 결제를 진행하고 최종 주문/예약 생성을 요청할 수 있다.
@@ -29,7 +29,7 @@
 - [x] FR-6: Redis 장애 시 fallback 전략과 근거를 제시해야 한다.
 - [x] FR-7: 한도 초과 등 결제 실패 케이스에 대한 대응 로직을 설계해야 한다.
 
-### 1.2 Non-Functional / Quality Requirements From Current Requirements
+### 1.2 현재 요구사항에서 확인한 비기능/품질 요구사항
 
 - [x] NFR-1: `00시` 트래픽 집중 상황에서 초과판매와 미달 판매가 발생하지 않도록 재고 정합성을 보장해야 한다.
 - [x] NFR-2: 모든 사용자가 동등한 확률로 상품을 구매할 수 있는 구조를 고민해야 한다.
@@ -40,14 +40,14 @@
 - [x] NFR-7: 실제 PG사 연동은 생략하되, 실제 PG의 결제 승인/조회/취소 또는 웹훅 흐름과 유사한 Mock interface로 구조적 흐름이 이어져야 한다.
 - [x] NFR-8: 회원 인증 및 로그인 보안 처리는 구현 범위에서 제외한다.
 
-### 1.3 Scale & Constraints
+### 1.3 규모와 제약
 
 | 항목 | 현재 요구사항 기준 |
 |---|---|
-| Stock quantity | `10` units |
-| Normal traffic | `50 TPS` |
-| Peak traffic | `500~1000 TPS` |
-| Peak duration | `1~5분` |
+| 재고 수량 | `10` units |
+| 평시 트래픽 | `50 TPS` |
+| 피크 트래픽 | `500~1000 TPS` |
+| 피크 지속 시간 | `1~5분` |
 | App topology | 애플리케이션 서버 `2대 이상` 분산 환경 |
 | Language / Framework | Java 21 / Spring Boot 3.x. DEC-000에서 user가 승인한 baseline |
 | Concrete RDB | MySQL 8. DEC-000에서 user가 승인한 baseline |
@@ -56,7 +56,7 @@
 | Observability stack | LGTM stack. DEC-000에서 user가 승인한 baseline |
 | Local ingress / LB candidate | k3s + Traefik. DEC-007에서 1차 과부하 방어 수단으로 부분 수용 |
 
-### 1.4 Out of Scope / Not Currently Specified
+### 1.4 범위 제외 / 현재 명시되지 않음
 
 - [x] 실제 PG사와의 운영 계약/API 세부 연동은 생략한다.
 - [x] 회원 인증 및 로그인 보안 처리는 구현 범위에서 제외한다.
@@ -68,19 +68,19 @@
 
 ---
 
-## 2. High Level Design
+## 2. 고수준 설계
 
 ### 2.1 Back-of-the-Envelope Estimation
 
-| Metric | 계산 | 값 / 해석 |
+| 지표 | 계산 | 값 / 해석 |
 |---|---|---|
-| Normal write pressure | 요구사항 기준 | 약 `50 TPS` |
-| Peak write pressure | 요구사항 기준 | 약 `500~1000 TPS` |
-| Peak window attempts | `500~1000 TPS * 60~300초` | 약 `30,000~300,000` booking attempts |
-| Successful bookings | `min(10, valid successful attempts)` | 최대 `10`건 |
-| Failure-dominant ratio | peak attempts 대비 성공 가능 건수 `10` | 대부분 요청은 빠른 실패, 재응답, 또는 대기/거절 경로를 타야 할 가능성이 높음 |
+| 평시 write pressure | 요구사항 기준 | 약 `50 TPS` |
+| 피크 write pressure | 요구사항 기준 | 약 `500~1000 TPS` |
+| 피크 구간 시도 수 | `500~1000 TPS * 60~300초` | 약 `30,000~300,000` booking attempts |
+| 성공 booking 수 | `min(10, valid successful attempts)` | 최대 `10`건 |
+| 실패 지배 비율 | peak attempts 대비 성공 가능 건수 `10` | 대부분 요청은 빠른 실패, 재응답, 또는 대기/거절 경로를 타야 할 가능성이 높음 |
 
-### 2.2 Core Entities (Conceptual, Not Final DDL)
+### 2.2 Core Entities (개념 모델, 최종 DDL 아님)
 
 - **User**: 인증 시스템에서 전달된 사용자 식별자, 가용 Y포인트.
 - **Product / Accommodation**: 상품명, 가격, 입/퇴실 시간, 판매 시작 시각.
@@ -91,7 +91,7 @@
 
 ### 2.3 API Contract (Draft)
 
-| Method | Path | Purpose | Notes |
+| Method | Path | 목적 | 비고 |
 |---|---|---|---|
 | `GET` | `/api/v1/checkout/{productId}` | 상품/가격/입퇴실/Y포인트 등 주문서 정보 조회 | 인증 방식은 범위 밖. 사용자 식별자는 전달된다고 가정 |
 | `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 정합성 확인, 최종 주문/예약 생성 | 멱등성 전달 방식은 미결정 |
@@ -170,7 +170,7 @@ flowchart LR
 - 결제 실패가 최종 주문/예약을 만들면 안 된다는 점은 요구사항상 자연스럽게 도출된다.
 - 결정 필요: 결제 요청과 DB transaction을 분리할지, 실패/timeout/unknown 결과를 어떤 상태로 다룰지.
 
-### 3.6 High Availability / Overload Defense
+### 3.6 고가용성 / 과부하 방어
 
 - `500~1000 TPS`를 `1~5분` 동안 고려해야 하지만, p95/p99, timeout, pool size, 실패 응답 기준은 지정되지 않았다.
 - k3s + Traefik은 LB/API gateway 역할의 1차 과부하 방어 수단으로 둔다.
@@ -179,9 +179,9 @@ flowchart LR
 
 ---
 
-## 4. Open Decisions
+## 4. 미결정 사항
 
-| ID | Topic | Why It Is Open |
+| ID | 주제 | 미결정 이유 |
 |---|---|---|
 | DEC-000 | 현재 repo stack/tooling 채택 | Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 user가 승인한 baseline이다. |
 | DEC-001 | 재고 상태 모델/공정성 정의 | authoritative admission gate 순서 기반 공정성은 부분 수용되었고, Redis 자료구조/DB 제약 세부는 미정이다. |

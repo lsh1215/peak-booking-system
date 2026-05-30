@@ -1,57 +1,57 @@
 # Redis Admission Design Note
 
-> This note explains why Redis is used, what Redis is allowed to decide, and what must remain durable in MySQL.
+> 이 문서는 Redis를 왜 쓰는지, Redis가 어디까지 판단할 수 있는지, 어떤 상태를 반드시 MySQL에 남겨야 하는지 정리한다.
 
-## Status
+## 상태
 
-Draft / Accepted direction by user on 2026-05-31.
+2026-05-31 기준 user가 수용한 설계 방향을 정리한 초안이다.
 
-This document does not replace `docs/decisions/DECISIONS.md`. It expands the Redis-related decision details for DEC-001, DEC-002, DEC-007, and later implementation work.
+이 문서는 `docs/decisions/DECISIONS.md`를 대체하지 않는다. DEC-001, DEC-002, DEC-007과 이후 구현 작업에 필요한 Redis 관련 세부 설계를 보충한다.
 
-## Core Position
+## 핵심 입장
 
-Redis is useful in this system only as a **fast admission pre-gate**.
+이 시스템에서 Redis의 가치는 **fast admission pre-gate** 역할에 있다.
 
-Redis must not be the final inventory correctness guard or the authoritative fairness ledger.
+Redis는 최종 재고 정합성 guard나 공정성 원장이 아니다.
 
 ```text
-Traefik = first-line WAS protection
-Redis = fast admission pre-gate in the normal path
+Traefik = 1차 WAS 보호
+Redis = 정상 경로의 빠른 admission pre-gate
 MySQL admission table = durable fairness/audit ledger
 MySQL inventory guard = final stock correctness
 ```
 
-## Why Redis Is Still Worth Using
+## Redis를 계속 사용할 이유
 
-The hard part of a `10`-stock event is not selling 10 units. The hard part is absorbing tens of thousands of failed, duplicate, or too-late attempts without letting them all hit MySQL.
+`10개 한정` 이벤트에서 어려운 부분은 10개를 판매하는 행위 자체가 아니다. 진짜 어려운 부분은 수만 건의 실패 요청, 중복 요청, 너무 늦은 요청이 모두 MySQL에 도달하지 않도록 흡수하는 것이다.
 
-Redis helps when it rejects most non-candidate traffic before MySQL:
+Redis는 MySQL 앞에서 후보가 아닌 트래픽 대부분을 빠르게 거절할 때 의미가 있다.
 
-- Duplicate clicks can return the existing admission sequence from Redis.
-- Candidate pool overflow can return `BUSY` without a DB write.
-- Admission ordering can be assigned cheaply with a Lua script.
-- MySQL only receives requests that are inside the candidate pool or require durable recording.
+- 중복 클릭은 Redis에 저장된 기존 admission sequence를 반환할 수 있다.
+- candidate pool이 가득 찬 요청은 DB write 없이 `BUSY`로 응답할 수 있다.
+- Lua script로 admission 순서를 저렴하게 부여할 수 있다.
+- MySQL은 candidate pool 안에 들어왔거나 durable 기록이 필요한 요청만 받는다.
 
-Redis is not useful if most requests still reach MySQL after Redis admission. In that case Redis would add failure modes without reducing DB pressure.
+Redis admission 이후에도 대부분의 요청이 MySQL에 도달한다면 Redis는 유용하지 않다. 그런 설계에서는 Redis가 DB 부하를 줄이지 못하고 장애 지점만 추가한다.
 
-## Data Structures
+## 자료구조
 
-For each product sale event epoch:
+상품 판매 이벤트 epoch마다 다음 key를 사용한다.
 
 ```text
-admit:{productId}:{epoch}:seq    -> Redis String counter, incremented with INCR
+admit:{productId}:{epoch}:seq    -> Redis String counter, INCR로 증가
 admit:{productId}:{epoch}:users  -> Redis Hash, userId -> redisSeq
 admit:{productId}:{epoch}:queue  -> Redis ZSET, score=redisSeq, member=userId
 admit:{productId}:{epoch}:meta   -> Redis Hash, optional gate metadata
 ```
 
-The counter is called a String counter because Redis has no separate Integer value type. Redis stores the numeric value as a String and atomically increments it with `INCR`.
+여기서 counter를 String counter라고 부르는 이유는 Redis에 별도 Integer value type이 없기 때문이다. Redis는 숫자 값을 String으로 저장하고 `INCR`로 원자적으로 증가시킨다.
 
-## Atomic Admission Operation
+## 원자적 Admission Operation
 
-Normal Redis admission uses a Lua script. ZSET/HASH/String counter define the data model; Lua defines the atomic operation.
+정상 Redis admission은 Lua script를 사용한다. ZSET/HASH/String counter는 데이터 모델이고, Lua script는 여러 명령을 하나의 원자적 operation으로 묶는 수단이다.
 
-Pseudo-flow:
+의사 흐름:
 
 ```text
 if userId already exists in users:
@@ -67,15 +67,15 @@ EXPIRE keys ttl
 return ADMITTED(seq)
 ```
 
-Redis `MULTI`/`EXEC` transactions and distributed locks are rejected for the default admission path:
+기본 admission 경로에서는 Redis `MULTI`/`EXEC` transaction과 distributed lock을 사용하지 않는다.
 
-- Transactions with `WATCH` add retry and branching complexity under contention.
-- Distributed locks are unnecessary because a short Lua script can make the admission decision atomically.
-- Redis locks are not the final correctness guard for inventory or fairness.
+- `WATCH` 기반 transaction은 경합 상황에서 재시도와 분기 처리가 복잡해진다.
+- 짧은 Lua script 하나로 admission 판단을 원자 처리할 수 있으므로 distributed lock이 필요하지 않다.
+- Redis lock은 inventory나 fairness의 최종 correctness guard가 아니다.
 
-## Durable Admission Rule
+## Durable Admission 규칙
 
-A Redis sequence alone is provisional. A user is considered effectively admitted only after MySQL records the admission row.
+Redis sequence만으로는 provisional 상태다. 사용자는 MySQL에 admission row가 기록된 뒤에만 유효하게 admission된 것으로 본다.
 
 ```text
 Redis seq issued
@@ -83,9 +83,9 @@ Redis seq issued
 -> admission is valid
 ```
 
-If Redis succeeds but MySQL admission recording fails, the system must not tell the client that admission succeeded. It should either return a retryable failure or switch the event epoch to DB fallback depending on the failure cause.
+Redis 처리는 성공했지만 MySQL admission 기록에 실패했다면 클라이언트에 admission 성공을 알려서는 안 된다. 실패 원인에 따라 retry 가능한 실패를 반환하거나 해당 event epoch을 DB fallback으로 전환한다.
 
-MySQL admission rows should retain enough information to audit and recover ordering:
+MySQL admission row에는 순서를 감사하고 복구할 수 있는 정보를 남겨야 한다.
 
 ```text
 product_id
@@ -98,7 +98,7 @@ status             -- ADMITTED / PROCESSING / SUCCEEDED / FAILED / EXPIRED
 created_at
 ```
 
-`db_admission_seq` is the official ordering value. It should be issued by a short MySQL sequence-counter transaction. The preferred MySQL 8 pattern is:
+`db_admission_seq`가 공식 ordering 값이다. 이 값은 짧은 MySQL sequence-counter transaction으로 발급한다. MySQL 8에서 우선 고려할 패턴은 다음과 같다.
 
 ```sql
 UPDATE admission_sequence
@@ -108,27 +108,27 @@ WHERE product_id = ? AND event_epoch = ?;
 SELECT LAST_INSERT_ID();
 ```
 
-This counter row is a deliberate hot row. It is acceptable only because bounded Redis/DB admission prevents total booking traffic from reaching it. The transaction must issue the sequence, insert `booking_admission`, and commit without payment calls, inventory locks, or long business logic.
+이 counter row는 의도적인 hot row다. 다만 bounded Redis/DB admission으로 전체 Booking 트래픽이 이 row에 직접 도달하지 않도록 제한하기 때문에 허용 가능한 병목으로 본다. transaction은 sequence 발급, `booking_admission` insert, commit까지만 수행해야 하며 payment call, inventory lock, 긴 business logic을 포함하면 안 된다.
 
-## Redis Failure And Recovery
+## Redis 장애와 복구
 
-Redis failure includes hard down, command timeout, OOM/write failure, unexpected admission key loss, or admission state that can no longer be trusted.
+Redis failure에는 hard down, command timeout, OOM/write failure, 예기치 않은 admission key loss, 더 이상 신뢰할 수 없는 admission state가 포함된다.
 
-Once Redis admission fails for an event epoch:
+특정 event epoch에서 Redis admission failure가 감지되면 다음 mode로 전환한다.
 
 ```text
 NORMAL_REDIS -> DB_FALLBACK
 ```
 
-The fallback is sticky for that event epoch. Even if Redis later recovers, the same event epoch does not switch back to Redis admission. This avoids merging Redis and DB fallback orderings.
+fallback은 해당 event epoch 동안 sticky하게 유지한다. Redis가 나중에 복구되어도 같은 event epoch 안에서는 Redis admission으로 되돌아가지 않는다. 이렇게 해야 Redis ordering과 DB fallback ordering을 병합하면서 생기는 공정성 문제를 피할 수 있다.
 
-The next event epoch may use Redis again if health checks and startup state are clean.
+다음 event epoch에서는 health check와 시작 상태가 정상일 때 Redis admission을 다시 사용할 수 있다.
 
-## TTL, Eviction, And Persistence
+## TTL, Eviction, Persistence
 
-TTL is cleanup, not correctness.
+TTL은 정리 정책이지 correctness 정책이 아니다.
 
-The TTL should be derived from business recovery windows:
+TTL은 비즈니스 복구 window를 기준으로 산정한다.
 
 ```text
 Redis admission TTL
@@ -136,49 +136,49 @@ Redis admission TTL
 + operational buffer
 ```
 
-Initial candidate: `6h`, subject to DEC-004 and DEC-005 once idempotency and payment reconciliation windows are accepted.
+초기 후보값은 `6h`다. 단, 최종값은 DEC-004의 idempotency replay window와 DEC-005의 payment reconciliation window가 확정된 뒤 함께 조정한다.
 
-Admission keys must not be treated as ordinary cache keys:
+Admission key는 일반 cache key처럼 취급하면 안 된다.
 
-- Active admission keys must not be evicted.
-- Redis memory pressure is treated as Redis admission failure.
-- Redis persistence can help recovery, but MySQL admission rows are the authoritative ledger.
+- Active admission key는 eviction 대상이 되면 안 된다.
+- Redis memory pressure는 Redis admission failure로 취급한다.
+- Redis persistence는 복구 보조 수단일 뿐이며, MySQL admission row가 authoritative ledger다.
 
-Recommended operational posture:
+권장 운영 방향:
 
 ```text
-admission state: explicit TTL, no eviction during active event
-checkout cache: may be evicted because DB can repopulate it
-Redis persistence: optional recovery aid, not correctness source
+admission state: explicit TTL, active event 중 eviction 금지
+checkout cache: DB에서 재조회 가능하므로 eviction 허용 가능
+Redis persistence: optional recovery aid, correctness source 아님
 ```
 
-## Failure Mode Policy
+## 실패 모드 정책
 
-| Failure | Policy |
+| 실패 상황 | 정책 |
 |---|---|
-| Redis command timeout | Retry only through idempotent user admission lookup; if uncertain, switch to DB_FALLBACK |
-| Redis OOM/write failure | Treat Redis admission as unavailable; use bounded DB fallback |
-| Redis key loss during active epoch | Treat Redis admission state as corrupted; use MySQL admission ledger and DB_FALLBACK |
-| Redis recovers after fallback | Do not switch back during the same epoch |
-| DB fallback budget exhausted | Fast fail with retryable busy/unavailable response |
+| Redis command timeout | idempotent user admission lookup으로만 재시도한다. 불확실하면 DB_FALLBACK으로 전환한다. |
+| Redis OOM/write failure | Redis admission을 unavailable로 보고 bounded DB fallback을 사용한다. |
+| Redis key loss during active epoch | Redis admission state가 손상된 것으로 보고 MySQL admission ledger와 DB_FALLBACK을 사용한다. |
+| Redis recovers after fallback | 같은 epoch 안에서는 Redis admission으로 되돌아가지 않는다. |
+| DB fallback budget exhausted | retry 가능한 busy/unavailable 응답으로 fast fail한다. |
 
-## Test Hooks
+## 테스트 훅
 
-Minimum tests:
+최소 테스트 후보:
 
-- Concurrent Redis admission produces no duplicate sequence.
-- Same user repeated requests return the same admission sequence.
-- Candidate limit overflow returns `BUSY` without DB admission insert.
-- Redis seq without MySQL row is not considered valid admission.
-- Redis down/timeout/OOM switches to bounded DB fallback.
-- Redis recovery does not switch the same epoch back from DB_FALLBACK to Redis.
-- Redis key loss does not cause oversell because MySQL remains the final source of truth.
+- 동시 Redis admission에서 sequence가 중복되지 않아야 한다.
+- 같은 사용자의 반복 요청은 같은 admission sequence를 반환해야 한다.
+- candidate limit 초과 요청은 DB admission insert 없이 `BUSY`를 반환해야 한다.
+- MySQL row가 없는 Redis seq는 유효 admission으로 보지 않아야 한다.
+- Redis down/timeout/OOM은 bounded DB fallback으로 전환되어야 한다.
+- Redis 복구 후에도 같은 epoch은 DB_FALLBACK에서 Redis admission으로 되돌아가지 않아야 한다.
+- Redis key loss가 발생해도 MySQL이 최종 source of truth이므로 oversell이 발생하지 않아야 한다.
 
-## Next Design Topic
+## 다음 설계 주제
 
-The next design step is the MySQL admission table and inventory correctness guard:
+다음 설계 주제는 MySQL admission table과 inventory correctness guard다.
 
-- DB admission sequence and uniqueness.
-- Candidate tranche/status transitions.
-- Reservation/hold model.
-- Final stock correctness mechanism in DEC-003.
+- DB admission sequence와 uniqueness.
+- candidate tranche/status transitions.
+- reservation/hold model.
+- DEC-003의 final stock correctness mechanism.
