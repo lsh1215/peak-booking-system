@@ -11,4 +11,5 @@
 | `system-design/mock-interview.md` | Working mock-interview style system design document. |
 | `system-design/sdd.md` | Working formal Software Design Document. |
 | `testing/test-first-scenarios.md` | Failure/race/duplicate scenarios to pin as tests before implementation. |
+| `testing/bootstrap-verification.md` | Evidence for backend bootstrap, local Docker/LGTM stack, k6 smoke test, and Kubernetes manifest rendering. |
 | `reviews/adversarial-review.md` | Critic-mode findings and closure status. |

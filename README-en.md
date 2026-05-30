@@ -40,8 +40,9 @@ The core design goal is not only to process successful bookings, but to prove co
 | Runtime | Spring MVC or WebFlux decision pending design validation |
 | Database | MySQL 8 |
 | Cache / Admission Control | Redis |
-| ORM | Spring Data JPA / Hibernate, pending implementation design |
-| Testing | JUnit 5, Spring Boot Test, Testcontainers, load-test tool TBD |
+| ORM | Spring Data JPA / Hibernate |
+| Load Testing | k6 |
+| Observability | LGTM stack, Micrometer Prometheus, OpenTelemetry Java agent |
 | Documentation | Markdown, ADR-style decision records, source-backed research notes |
 
 ## Project Structure
@@ -50,6 +51,16 @@ The core design goal is not only to process successful bookings, but to prove co
 .
 ├── AGENTS.md
 ├── README.md
+├── README-en.md
+├── build.gradle
+├── settings.gradle
+├── common
+├── service-booking
+├── docker-compose.yml
+├── infra
+│   └── observability
+├── k6
+├── k8s
 ├── docs
 │   ├── requirements.md
 │   ├── ai
@@ -64,26 +75,42 @@ The core design goal is not only to process successful bookings, but to prove co
     └── skills
 ```
 
-The backend source tree has not been generated yet. Once implementation starts, the expected source layout will be added under the project root and reflected here.
+The backend now starts as a Spring Boot multi-module project.
+
+- `common`: shared kernel, common response/exception/JPA auditing/CORS/OpenAPI/Actuator configuration
+- `service-booking`: booking service application and initial health-check API
+- `infra/observability`: local LGTM observability configuration and Grafana dashboard provisioning
+- `k6`: health-check smoke load test
+- `k8s`: Kubernetes kustomize manifests
 
 ## Getting Started
 
-The repository is currently in requirements and design setup phase. Backend bootstrap commands will be added after the Spring Boot project skeleton is generated.
-
-Planned local workflow:
+Local execution uses Docker Compose for MySQL, Redis, LGTM, and the application.
 
 ```bash
-# 1. Start dependencies
-docker compose up -d mysql redis
+# 1. Compile and test
+./gradlew compileJava test --no-daemon
 
-# 2. Run the application
-./gradlew bootRun
+# 2. Start the local stack
+docker compose up -d mysql redis lgtm booking-service
 
-# 3. Run tests
-./gradlew test
+# 3. Health check
+curl http://localhost:8080/api/v1/health
 
-# 4. Run load tests
-# TBD after the load-test tool is selected
+# 4. k6 smoke load test
+docker compose run --rm -e RATE=20 -e DURATION=10s k6
+
+# 5. Stop
+docker compose down
+```
+
+Grafana is available at `http://localhost:3000`. The provisioned default dashboard is Grafana dashboard template `4701 JVM (Micrometer)`, adapted for this project.
+
+Render the Kubernetes manifests with:
+
+```bash
+kubectl kustomize k8s/base
+kubectl kustomize k8s/local
 ```
 
 ## API Endpoints
@@ -94,6 +121,7 @@ Initial API scope:
 |---|---|---|---|
 | `GET` | `/api/v1/checkout/{productId}` | Read checkout information such as product, stay dates, price, and user point balance. | Planned |
 | `POST` | `/api/v1/bookings` | Validate payment inputs, enforce idempotency, reserve/confirm stock, and create a final booking. | Planned |
+| `GET` | `/api/v1/health` | Service startup and smoke/load-test health check. | Implemented |
 
 Final request/response schemas will be documented after the system design and domain model are accepted.
 
@@ -108,6 +136,7 @@ Final request/response schemas will be documented after the system design and do
 | [Mock Interview Design](docs/system-design/mock-interview.md) | Working system-design discussion document. |
 | [Software Design Document](docs/system-design/sdd.md) | Formal SDD working document. |
 | [Test-First Scenarios](docs/testing/test-first-scenarios.md) | Failure, race, duplicate, and overload scenarios to pin as tests. |
+| [Bootstrap Verification](docs/testing/bootstrap-verification.md) | Backend, local deployment, observability, and k6 verification evidence. |
 | [Adversarial Review](docs/reviews/adversarial-review.md) | Critic-mode findings for oversell, undersell, Redis outage, and retry storm risks. |
 | [AI Usage](docs/ai/AI_USAGE.md) | Public disclosure of AI usage and human verification boundary. |
 
@@ -117,8 +146,8 @@ Final request/response schemas will be documented after the system design and do
 - [x] README initialized
 - [x] AI usage, prompt log, and conversation log structure created
 - [x] Decision, research, test-first, and adversarial review documents initialized
-- [ ] Spring Boot backend skeleton
+- [x] Spring Boot backend skeleton
 - [ ] Domain model and API schema
 - [ ] Concurrency and idempotency tests
-- [ ] Load-test scenario
+- [x] Initial k6 health-check load-test scenario
 - [ ] Final design decision review

@@ -13,6 +13,8 @@
 | RDB | MySQL 8 |
 | Cache | Redis |
 | 실행 형태 | 2대 이상의 stateless application replica를 가정 |
+| 부하 테스트 | k6 |
+| 모니터링 | LGTM stack |
 
 원문 요구사항의 최소 기술 조건보다 높은 버전을 선택하되, 선택 근거와 트레이드오프는 `docs/decisions/DECISIONS.md`에 기록한다.
 
