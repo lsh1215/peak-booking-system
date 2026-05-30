@@ -1,0 +1,4 @@
+rootProject.name = 'peak-booking-system'
+
+include 'common'
+include 'service-booking'
