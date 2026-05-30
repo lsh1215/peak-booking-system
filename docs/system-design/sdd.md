@@ -10,12 +10,12 @@
 | 항목 | 값 |
 |---|---|
 | Document Title | Peak Booking System SDD |
-| Version | 0.4 (Requirements-aligned Draft) |
+| Version | 0.6 (Design-Doc Completeness Draft) |
 | Status | Draft / Decisions Pending |
 | Author(s) | Sanghun Lee + Codex |
-| Last Updated | 2026-05-30 |
+| Last Updated | 2026-05-31 |
 | Requirement Source | `docs/requirements.md` |
-| Related Documents | `docs/decisions/DECISIONS.md`, `docs/system-design/mock-interview.md`, `docs/testing/test-first-scenarios.md`, `docs/research/source-backed-research-note.md` |
+| Related Documents | `docs/decisions/DECISIONS.md`, `docs/system-design/mock-interview.md`, `docs/system-design/redis-admission-design.md`, `docs/testing/test-first-scenarios.md`, `docs/research/source-backed-research-note.md` |
 
 ### 0.1 Revision History
 
@@ -25,6 +25,8 @@
 | 0.2 | 2026-05-30 | Sanghun Lee + Codex | Removed template-only sections and added Mermaid diagrams |
 | 0.3 | 2026-05-30 | Sanghun Lee + Codex | Realigned to current extracted requirements and demoted unapproved choices to open decisions |
 | 0.4 | 2026-05-30 | Sanghun Lee + Codex | Added fixed stock=10, Y페이/Y포인트, constrained scale-up/out, and source-backed Mock PG assumptions |
+| 0.5 | 2026-05-31 | Sanghun Lee + Codex | Recorded authoritative admission fairness, Traefik first-line overload defense, and bounded DB admission fallback for Redis failure |
+| 0.6 | 2026-05-31 | Sanghun Lee + Codex | Added Alternatives Considered, Deployment Strategy, and Monitoring Strategy sections |
 
 ---
 
@@ -65,14 +67,14 @@ DEC-000에 따라 Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM stack은 user가 �
 
 ## 2. System Overview
 
-본 시스템은 주문서 진입 정보 조회와 결제/예약 완료 요청을 처리하는 Spring Boot 기반 backend다. Redis는 요구사항상 필수 cache 구성요소이며, Redis 장애 시 fallback 전략이 필요하다. RDB는 MySQL/MariaDB 계열이어야 하지만, 최종 재고 정합성을 어떤 테이블/제약/transaction 방식으로 보장할지는 미정이다.
+본 시스템은 주문서 진입 정보 조회와 결제/예약 완료 요청을 처리하는 Spring Boot 기반 backend다. k3s + Traefik은 scale-out된 WAS 앞단의 LB/API gateway 후보이며, `POST /bookings` route-level rate limit으로 WAS 보호를 담당한다. Redis는 정상 상태 admission gate 후보이며, Redis 장애 시에는 MySQL 기반 bounded DB admission gate로 제한 fallback한다. RDB는 최종 재고 정합성 guard의 권위가 되어야 하지만, 구체 테이블/제약/transaction 방식은 DEC-003에서 결정한다.
 
 ```mermaid
 flowchart LR
-    Client[Client] --> LB[Load Balancer]
+    Client[Client] --> LB[Traefik<br/>LB + route-level rate limit]
     LB --> App[Spring Boot App Replicas]
-    App --> Redis[(Redis)]
-    App --> RDB[(MySQL or MariaDB)]
+    App --> Redis[(Redis<br/>normal admission/cache candidate)]
+    App --> RDB[(MySQL<br/>DB admission + final guard)]
     App --> PaymentPort[Payment Provider Interface]
     PaymentPort --> StubPG[Mock PG<br/>confirm/query/cancel/event]
 ```
@@ -117,7 +119,9 @@ flowchart LR
 - 요구사항에 없는 값을 임의로 확정하지 않는다.
 - 대상 초특가 숙소 상품 재고는 요구사항상 `10개`로 고정한다.
 - `Idempotency-Key`, request hash, stored response replay는 후보 정책이며, 최종 결정 전에는 요구사항으로 표현하지 않는다.
-- Redis 장애 시 fallback은 필수 설계 주제지만, fail-closed/bounded fallback 등 구체 정책은 미정이다.
+- 공정성은 클라이언트 클릭 시각이 아니라 권위 있는 admission gate의 sequence로 판단한다.
+- Redis 장애 시 Booking write path는 bounded DB admission gate로 제한 fallback한다. unlimited DB fallback은 금지한다.
+- Traefik rate limit은 WAS/DB 보호 수단이며, 중복 방지나 공정성 원장이 아니다.
 - Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 DEC-000에서 승인된 프로젝트 baseline이다.
 
 ---
@@ -132,6 +136,9 @@ flowchart LR
 
 ```mermaid
 flowchart TB
+    Client[Client]
+    Traefik["Traefik<br/>route-level rate limit"]
+
     subgraph App["Spring Boot App Replicas"]
         CheckoutController["Checkout API"]
         BookingController["Booking API"]
@@ -139,7 +146,8 @@ flowchart TB
         BookingService["Booking Application Logic"]
         IdempotencyPolicy["Idempotency Policy<br/>pending"]
         InventoryGuard["Inventory Correctness Guard<br/>pending"]
-        RedisFallback["Redis Fallback Policy<br/>pending"]
+        RedisAdmission["Redis Admission Gate<br/>normal path details pending"]
+        DBAdmission["Bounded DB Admission Gate<br/>Redis failure fallback"]
         PaymentPolicy["Payment Combination Policy"]
         PaymentPort["Payment Provider Interface"]
     end
@@ -148,6 +156,10 @@ flowchart TB
     RDB[(MySQL or MariaDB)]
     MockPG[Mock PG<br/>confirm/query/cancel/event]
 
+    Client --> Traefik
+    Traefik --> CheckoutController
+    Traefik --> BookingController
+
     CheckoutController --> CheckoutService
     CheckoutService --> Redis
     CheckoutService --> RDB
@@ -155,12 +167,14 @@ flowchart TB
     BookingController --> BookingService
     BookingService --> IdempotencyPolicy
     BookingService --> PaymentPolicy
-    BookingService --> RedisFallback
+    BookingService --> RedisAdmission
+    BookingService --> DBAdmission
     BookingService --> InventoryGuard
     BookingService --> PaymentPort
 
     IdempotencyPolicy --> RDB
-    RedisFallback --> Redis
+    RedisAdmission --> Redis
+    DBAdmission --> RDB
     InventoryGuard --> RDB
     PaymentPort --> MockPG
 ```
@@ -231,7 +245,8 @@ erDiagram
 |---|---|
 | Stock quantity | Fixed at `10` for the target limited accommodation product |
 | Inventory model | Count row, per-unit row, reservation table, or another model is open |
-| User/product duplicate booking rule | Not explicitly required; may be needed for fairness but needs user decision |
+| User/product duplicate admission rule | Accepted direction: duplicate click/retry must not increase chance; exact unique constraints and idempotency interaction remain open |
+| Admission ledger | Accepted direction: MySQL `booking_admission` is durable fairness/audit ledger; Redis sequence is provisional |
 | Idempotency storage | Required conceptually, but key/hash/replay/TTL policy is open |
 | Payment state | Failure handling required; timeout/unknown/reconciliation policy is open |
 | Y포인트 balance consistency | Payment method support requires Y포인트, but ledger/balance model is open |
@@ -243,15 +258,21 @@ erDiagram
 ```mermaid
 sequenceDiagram
     participant C as Client
+    participant T as Traefik
     participant A as App
     participant R as Redis
     participant D as RDB
     participant P as Payment Interface
 
-    C->>A: POST /bookings
+    C->>T: POST /bookings
+    T->>A: pass route-level rate limit
     A->>A: validate payment combination
     A->>A: apply idempotency policy (pending)
-    A->>R: Redis coordination/fallback path (pending)
+    alt Redis available
+        A->>R: assign Redis admission sequence (details pending)
+    else Redis unavailable
+        A->>D: bounded DB admission sequence
+    end
     A->>D: inventory correctness guard (pending)
     A->>P: mock/stub PG flow
     alt payment success
@@ -287,14 +308,71 @@ sequenceDiagram
 ### 7.4 Redis Failure Policy
 
 - Redis 장애 fallback 전략과 근거는 필수 산출물이다.
-- fail-closed, bounded DB fallback, degraded read-only mode 등 구체 선택은 미정이다.
+- Booking write path는 Redis 장애 시 bounded DB admission gate로 전환한다.
+- bounded DB admission은 candidate pool, app semaphore/bulkhead, 짧은 timeout으로 제한한다.
+- 모든 요청을 DB로 보내는 unlimited fallback은 금지한다.
+- 같은 event epoch에서 Redis 장애가 감지되면 `DB_FALLBACK`으로 전환하고 Redis가 복구되어도 Redis gate로 돌아가지 않는다.
+- candidate pool 크기, rate limit, semaphore/connection budget은 아직 미정이다.
 
-### 7.5 Idempotency Policy
+### 7.5 Redis Admission Design
+
+- Redis는 정상 상태의 fast admission pre-gate다.
+- Redis 자료구조는 ZSET + Hash + String counter를 사용한다.
+- Redis admission 원자성은 Lua script로 보장한다.
+- Redis transaction과 distributed lock은 기본 admission 구현에서 사용하지 않는다.
+- Redis sequence만으로는 유효 admission이 아니다. MySQL admission row 저장 성공 후에만 admission이 유효하다.
+- Redis TTL은 `max(idempotency replay window, payment reconciliation window) + operational buffer`로 산정한다.
+- Active admission key는 eviction 대상이 되면 안 되며, Redis persistence는 보조 수단일 뿐 MySQL admission table이 복구/감사 원장이다.
+- 자세한 내용은 [Redis Admission Design Note](redis-admission-design.md)를 따른다.
+
+### 7.6 MySQL Admission Ledger
+
+The MySQL admission table is the authoritative fairness/audit ledger. Redis admission is valid only after this row is persisted.
+
+Candidate table fields:
+
+```text
+booking_admission
+- product_id
+- event_epoch
+- user_id
+- gate_mode          -- REDIS / DB_FALLBACK
+- redis_seq          -- nullable diagnostic/reference value
+- db_admission_seq   -- official ordering value
+- tranche_no
+- status             -- ADMITTED / PROCESSING / SUCCEEDED / FAILED / EXPIRED
+- admitted_at
+- processing_started_at
+- completed_at
+- expires_at
+```
+
+Candidate constraints:
+
+```text
+UNIQUE(product_id, event_epoch, user_id)
+UNIQUE(product_id, event_epoch, db_admission_seq)
+INDEX(product_id, event_epoch, status, db_admission_seq)
+```
+
+`db_admission_seq` is issued by an `admission_sequence` counter row. This counter is a hot row by design, but it is only reached by bounded candidate traffic. The preferred implementation should minimize lock hold time with an atomic MySQL update pattern:
+
+```sql
+UPDATE admission_sequence
+SET next_seq = LAST_INSERT_ID(next_seq + 1)
+WHERE product_id = ? AND event_epoch = ?;
+
+SELECT LAST_INSERT_ID();
+```
+
+The sequence transaction must stay short: issue sequence, insert admission row, commit. It must not include payment calls, inventory locks, or long business processing.
+
+### 7.7 Idempotency Policy
 
 - 짧은 간격의 연속 결제 요청이 중복 처리되지 않아야 한다.
 - key 전달 방식, 요청 body hash, 저장 결과 replay, conflict response, TTL은 미정이다.
 
-### 7.6 Mock Payment Provider Assumptions
+### 7.8 Mock Payment Provider Assumptions
 
 실제 PG사와의 운영 연동은 생략하지만, Mock PG는 단순 boolean stub이 아니라 실제 PG와 유사한 불확실성을 표현해야 한다.
 
@@ -322,7 +400,7 @@ sequenceDiagram
 |---|---|---|
 | Correctness | 초과판매/미달판매 방지 | `10개` 재고 기준으로 confirmed booking/order가 10을 초과하지 않아야 하며, 결제 실패/장애 후 재고가 영구 누락되지 않아야 함 |
 | Fairness | 동등한 확률 | 테스트 가능한 fairness policy가 DEC-001에서 정의되어야 함 |
-| Availability | TPS 급증 대응 | `500~1000 TPS` for `1~5분`에서 시스템 붕괴 방지. 붕괴 기준은 DEC-007에서 정의 |
+| Availability | TPS 급증 대응 | Traefik route-level rate limit + app/DB bulkhead로 `500~1000 TPS` burst에서 WAS/DB 붕괴 방지. 수치와 pass/fail 기준은 DEC-007/DEC-008에서 정의 |
 | Idempotency | 연속 결제 요청 중복 방지 | 반복 요청이 중복 결제/중복 예약을 만들지 않아야 함 |
 | Redis failure | fallback 전략 | Redis 장애 대응 방식과 근거가 DEC-002에 기록되어야 함 |
 | Payment failure | 결제 실패 처리 | 실패 결제가 최종 주문/예약 성공으로 남지 않아야 함 |
@@ -337,13 +415,13 @@ Detailed decisions are tracked in `docs/decisions/DECISIONS.md`.
 | Decision ID | Topic |
 |---|---|
 | DEC-000 | Current repo stack/tooling acceptance (Accepted) |
-| DEC-001 | Stock model and fairness policy |
-| DEC-002 | Redis failure fallback policy |
+| DEC-001 | Stock model and fairness policy (Partially Accepted) |
+| DEC-002 | Redis failure fallback policy (Accepted) |
 | DEC-003 | RDB inventory correctness guard |
 | DEC-004 | Idempotency policy |
 | DEC-005 | Payment failure and PG abstraction |
 | DEC-006 | Payment method extensibility |
-| DEC-007 | HA/load shedding/backpressure |
+| DEC-007 | HA/load shedding/backpressure (Partially Accepted) |
 | DEC-008 | Test/load/observability strategy |
 
 ---
@@ -352,8 +430,8 @@ Detailed decisions are tracked in `docs/decisions/DECISIONS.md`.
 
 | ID | Risk | Impact | Required Decision |
 |---|---|---|---|
-| R-1 | Fairness is vague and cannot be tested | High | DEC-001 |
-| R-2 | Redis fallback bypasses protection and overloads RDB | High | DEC-002 |
+| R-1 | Redis admission details and DB fallback epoch are not yet specified | High | DEC-001 / DEC-002 |
+| R-2 | Redis fallback bypasses protection and overloads RDB if bounds are misconfigured | High | DEC-002 / DEC-007 |
 | R-3 | Inventory guard allows oversell or permanent undersell | Critical | DEC-003 |
 | R-4 | Rapid repeated payment requests create duplicate effects | Critical | DEC-004 |
 | R-5 | Payment failure/timeout leaves inconsistent booking/payment state | High | DEC-005 |
@@ -370,14 +448,122 @@ Detailed decisions are tracked in `docs/decisions/DECISIONS.md`.
 | FR-3 | Payment methods and combinations | §7.3 | DEC-006, TFP-010 |
 | FR-4 | Idempotency for rapid payment requests | §7.5, §9 | DEC-004, TFP-002 |
 | FR-5 | Redis failure fallback | §7.4, §9 | DEC-002, TFP-004 |
-| FR-6 | Payment failure handling | §7.2, §7.6, §9 | DEC-005, TFP-006, TFP-011 |
+| FR-6 | Payment failure handling | §7.2, §7.8, §9 | DEC-005, TFP-006, TFP-011 |
 | NFR-1 | Stock=10 correctness and fairness | §6, §9 | DEC-001, DEC-003, TFP-001 |
 | NFR-2 | HA under 50/500~1000 TPS | §9 | DEC-007 |
-| NFR-3 | Runnable source and docs | §13 | DEC-008 |
+| NFR-3 | Runnable source and docs | §16 | DEC-008 |
 
 ---
 
-## 13. Local Execution And Verification Handoff
+## 13. Alternatives Considered
+
+This section summarizes the major alternatives considered so far. Final acceptance and rationale are tracked in `docs/decisions/DECISIONS.md`.
+
+| Topic | Alternative | Status | Rationale / Trade-off |
+|---|---|---|---|
+| Fairness clock | Client click timestamp | Rejected | Client time/network path is not a trustworthy or measurable fairness source. |
+| Fairness clock | Authoritative admission gate sequence | Accepted Direction | Server-side Redis/DB sequence is measurable and auditable when persisted to MySQL. |
+| Gateway rate limit | Traefik route/global rate limit | Accepted Direction | Protects WAS/DB before requests hit app replicas; not a fairness or duplicate-prevention ledger. |
+| Gateway rate limit | User-level Traefik limit before authentication | Deferred | User identity is mock/trusted for now; JWT/principal support is needed before treating user-level gateway limits as trustworthy. |
+| Redis data structure | ZSET + Hash + String counter | Accepted Direction | Supports ordering, duplicate lookup, and monotonic sequence generation. |
+| Redis atomicity | Lua script | Accepted Direction | Keeps duplicate check, candidate limit check, sequence issue, and queue insert atomic. |
+| Redis atomicity | `MULTI`/`EXEC` transaction | Rejected for default path | More client-side branching/retry complexity under contention. |
+| Redis coordination | Distributed lock / Redlock | Rejected for default path | Admission can be handled by one atomic Lua operation; locks add safety assumptions without becoming final correctness guard. |
+| Redis failure fallback | Fail-closed Booking path | Rejected as primary policy | Simpler but weak against the requirement to operate under failure. |
+| Redis failure fallback | Bounded DB admission fallback | Accepted | Preserves limited operation and fairness ledger while protecting DB with budgets. |
+| Redis recovery | Return to Redis in same epoch | Rejected | Merging Redis and DB fallback orderings can break fairness. |
+| Redis recovery | Sticky `DB_FALLBACK` for same epoch | Accepted | Simpler and avoids ordering merge. |
+| DB admission sequence | `admission_sequence` counter row | Accepted Direction | Clear per-product/epoch official sequence; hot row must be bounded and tested. |
+| DB admission sequence | `AUTO_INCREMENT` as official sequence | Not selected | Simpler but less explicit per product/epoch and harder to explain as fairness ledger. |
+| Inventory guard | Conditional count update | Open | Simple but may create hot row contention; DEC-003 pending. |
+| Inventory guard | Per-unit inventory row | Open | Precise unit reservation model but more schema/state complexity; DEC-003 pending. |
+| Inventory guard | Reservation table + expiry/release | Open | Strong fit for payment failure/timeout recovery; DEC-003/DEC-005 pending. |
+| Payment timeout handling | Treat timeout as immediate failure | Open / risky | Simple but can create duplicate charge/booking risk if PG eventually succeeds. |
+| Payment timeout handling | Reconciliation state/worker | Open | More operational complexity but better models real PG uncertainty. |
+
+---
+
+## 14. Deployment Strategy
+
+### 14.1 Accepted Deployment Baseline
+
+- Local orchestration uses the existing repo entrypoints: `docker-compose.yml`, `backend/`, `k6/`, `infra/observability/`, and `k8s/`.
+- The backend is one stateless Spring Boot application, not multiple Gradle service modules.
+- MySQL, Redis, and LGTM are local infrastructure dependencies.
+- k3s + Traefik is the accepted local Kubernetes ingress/LB direction for scale-out WAS assumptions.
+- At least 2 app replicas are assumed for the design and must be represented in Kubernetes/local verification before claiming distributed correctness.
+
+### 14.2 Deployment Flow Candidate
+
+```mermaid
+flowchart LR
+    Dev[Build/Test] --> Image[Build booking-service image]
+    Image --> Local[Docker Compose smoke]
+    Local --> K3s[k3s apply/kustomize]
+    K3s --> Traefik[Traefik ingress + route-level limit]
+    Traefik --> Replicas[2+ Spring Boot replicas]
+    Replicas --> MySQL[(MySQL)]
+    Replicas --> Redis[(Redis)]
+    Replicas --> LGTM[(LGTM)]
+```
+
+### 14.3 Rollout Guardrails
+
+- Apply DB schema migrations before application rollout once migration tooling is introduced.
+- Deploy app replicas as stateless instances; no JVM-local lock/session/memory may be required for correctness.
+- Use readiness checks so replicas do not receive Booking traffic before MySQL/Redis connectivity and required schema checks pass.
+- Route-level Traefik rate limits must be applied before load tests that claim peak protection.
+- Redis admission failure must be treated as a mode transition to bounded DB fallback, not as an uncontrolled app exception path.
+
+### 14.4 Still Open
+
+- Exact k3s manifests, Traefik middleware values, resource requests/limits, HPA usage, and readiness/liveness probes.
+- DB migration tool choice and migration ordering.
+- Secret/config management for local vs future production-like environments.
+- Whether Redis admission and checkout cache use the same Redis instance/logical DB or are split.
+- Exact app replica count for k6 validation beyond the minimum `2+` assumption.
+
+---
+
+## 15. Monitoring Strategy
+
+### 15.1 Accepted Monitoring Baseline
+
+DEC-000 accepts LGTM as the local observability stack. Monitoring exists to prove or falsify the overload/correctness claims, not just to display generic JVM health.
+
+### 15.2 Required Signals
+
+| Area | Signals |
+|---|---|
+| Traffic / gateway | Traefik request rate, `429/503` count, route-level rate-limit hit count, latency by route |
+| App health | JVM CPU/memory, request latency, error count, active request threads, retry count |
+| Redis admission | Lua latency, timeout count, duplicate admission count, BUSY count, candidate pool size, mode transition count |
+| DB admission | admission insert latency, `db_admission_seq` issue latency, lock wait, deadlock/timeout count, Hikari active/idle/pending |
+| Inventory correctness | succeeded count, held/processing count, failed/expired count, remaining stock, oversell invariant violations |
+| Payment path | PG mock confirm latency, failure count, timeout/unknown count, cancel/reconciliation count |
+| Fallback | `NORMAL_REDIS` vs `DB_FALLBACK` mode, fallback admission accepted/rejected count, candidate tranche open count |
+
+### 15.3 Alert / Pass-Fail Candidates
+
+The exact thresholds remain DEC-008 decisions. Initial alert candidates:
+
+- confirmed bookings exceed `10`: critical correctness failure.
+- Redis admission unavailable and DB fallback budget exhausted: degraded mode alert.
+- Hikari pending connections continuously increasing during fallback: DB protection failure.
+- DB lock wait timeout or deadlock count above threshold during admission sequence issuance: sequence hot-row risk.
+- Payment `UNKNOWN` count not draining within reconciliation window: recovery risk.
+- k6 peak test shows sustained app 5xx unrelated to intentional `429/503` shedding: overload failure.
+
+### 15.4 Still Open
+
+- Concrete metric names after implementation.
+- LGTM dashboard layout and required screenshots/evidence for DEC-008.
+- Exact SLO/pass-fail thresholds for p95/p99 latency, error rate, lock wait, Hikari pending, and payment unknown drain time.
+- Whether alerts are local-only documentation or actual alert rules in the repo.
+
+---
+
+## 16. Local Execution And Verification Handoff
 
 DEC-000에 따라 k6/LGTM은 공식 baseline tooling이다. 아래 entrypoint는 현재 repo의 로컬 검증 루프이며, DEC-008에서는 도구 채택 여부가 아니라 도메인 부하 시나리오와 pass/fail 기준을 정한다.
 
@@ -392,10 +578,10 @@ docker compose run --rm -e RATE=20 -e DURATION=10s k6
 
 ---
 
-## 14. Open Questions
+## 17. Open Questions
 
-1. "동등한 확률"을 FIFO, random, first-attempt timestamp, 사용자당 제한 중 무엇으로 검증할 것인가?
-2. Redis 장애 시 write path는 fail-closed인가, 제한 fallback인가, 다른 degraded mode인가?
+1. Redis 장애 fallback의 candidate pool, rate limit, semaphore, DB connection budget 초기값은 무엇인가?
+2. Admission status transitions and candidate tranche open criteria are not finalized.
 3. RDB 재고 정합성은 count row, per-unit row, reservation table 중 무엇으로 보장할 것인가?
 4. 멱등성은 어떤 key, body 비교, replay, TTL 정책을 사용할 것인가?
 5. 결제 실패와 timeout/unknown 결과를 같은 실패로 볼 것인가, 별도 reconciliation 대상으로 볼 것인가?
@@ -409,5 +595,6 @@ docker compose run --rm -e RATE=20 -e DURATION=10s k6
 - [Requirements](../requirements.md)
 - [Decision log](../decisions/DECISIONS.md)
 - [Mock-interview design](mock-interview.md)
+- [Redis admission design](redis-admission-design.md)
 - [Test-first scenarios](../testing/test-first-scenarios.md)
 - [Source-backed research note](../research/source-backed-research-note.md)
