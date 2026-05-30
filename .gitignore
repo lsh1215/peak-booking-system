@@ -1,0 +1,39 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Java / Gradle
+.gradle/
+build/
+out/
+target/
+*.class
+
+# Test / coverage output
+test-results/
+coverage/
+reports/
+
+# Runtime logs
+*.log
+logs/
+.codex-log/
+
+# Local AI / orchestration runtime state
+.omx/
+.claude/logs/
+docs/ai/.ai-log.lock
+
+# Docker / local data
+docker-data/
+data/
+tmp/
+
