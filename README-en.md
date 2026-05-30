@@ -55,8 +55,7 @@ The core design goal is not only to process successful bookings, but to prove co
 ├── backend
 │   ├── build.gradle
 │   ├── settings.gradle
-│   ├── common
-│   ├── service-booking
+│   ├── src
 │   └── Dockerfile
 ├── docker-compose.yml
 ├── infra
@@ -77,10 +76,11 @@ The core design goal is not only to process successful bookings, but to prove co
     └── skills
 ```
 
-The backend now starts as a Spring Boot multi-module project.
+The backend now starts as a single Spring Boot application. The application stays stateless and scales out by increasing Kubernetes replicas.
 
-- `backend/common`: shared kernel, common response/exception/JPA auditing/CORS/OpenAPI/Actuator configuration
-- `backend/service-booking`: booking service application and initial health-check API
+- `backend/src/main/java/com/peakbooking`: single Spring Boot application entrypoint
+- `backend/src/main/java/com/peakbooking/common`: common response/exception/JPA auditing/CORS/OpenAPI configuration
+- `backend/src/main/java/com/peakbooking/booking`: package for booking-domain APIs and the initial health-check API
 - `infra/observability`: local LGTM observability configuration and Grafana dashboard provisioning
 - `k6`: health-check smoke load test
 - `k8s`: Kubernetes kustomize manifests

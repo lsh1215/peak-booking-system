@@ -1,8 +1,9 @@
 spring:
   application:
     name: peak-booking-service
-  profiles:
-    include: common
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/peak_booking?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:peak}
@@ -20,6 +21,26 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+
+logging:
+  pattern:
+    console: "%d{ISO8601} %-5level [%thread] [traceId=%X{trace_id:-},spanId=%X{span_id:-}] %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,circuitbreakers,circuitbreakerevents
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name:unknown}
 
 springdoc:
   info:

@@ -55,8 +55,7 @@
 ├── backend
 │   ├── build.gradle
 │   ├── settings.gradle
-│   ├── common
-│   ├── service-booking
+│   ├── src
 │   └── Dockerfile
 ├── docker-compose.yml
 ├── infra
@@ -77,10 +76,11 @@
     └── skills
 ```
 
-현재 백엔드는 Spring Boot 멀티모듈 구조로 시작합니다.
+현재 백엔드는 단일 Spring Boot 애플리케이션으로 시작합니다. 애플리케이션은 stateless 서버로 유지하고, Kubernetes replica를 늘려 scale out하는 방식을 기본으로 둡니다.
 
-- `backend/common`: shared kernel, 공통 응답/예외/JPA auditing/CORS/OpenAPI/Actuator 설정
-- `backend/service-booking`: 예약 서비스 애플리케이션과 초기 헬스체크 API
+- `backend/src/main/java/com/peakbooking`: 단일 Spring Boot 애플리케이션 진입점
+- `backend/src/main/java/com/peakbooking/common`: 공통 응답/예외/JPA auditing/CORS/OpenAPI 설정
+- `backend/src/main/java/com/peakbooking/booking`: 예약 도메인 API를 확장할 패키지와 초기 헬스체크 API
 - `infra/observability`: LGTM 로컬 관측 스택 설정과 Grafana dashboard provisioning
 - `k6`: 헬스체크 smoke 부하 테스트
 - `k8s`: Kubernetes 배포용 kustomize manifests

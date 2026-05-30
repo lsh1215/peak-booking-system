@@ -83,7 +83,7 @@ Multiple Codex sessions may run at the same time.
 
 ## Command Contract
 
-Backend source and Gradle files live under `backend/`. Keep root-level `k6/`, `k8s/`, `infra/observability/`, and `docker-compose.yml` as the local orchestration and verification entrypoints.
+Backend source and Gradle files live under `backend/` as one stateless Spring Boot application, not as per-service Gradle modules. Keep root-level `k6/`, `k8s/`, `infra/observability/`, and `docker-compose.yml` as the local orchestration and verification entrypoints.
 
 ```bash
 cd backend

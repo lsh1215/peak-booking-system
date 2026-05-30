@@ -44,7 +44,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: booking-service
-          image: peak-booking/service-booking:local
+          image: peak-booking/backend:local
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

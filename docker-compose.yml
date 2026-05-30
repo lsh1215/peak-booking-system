@@ -48,9 +48,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: service-booking
-    image: peak-booking/service-booking:local
+    image: peak-booking/backend:local
     depends_on:
       mysql:
         condition: service_healthy

@@ -12,5 +12,5 @@ resources:
   - booking-service.yaml
 
 images:
-  - name: peak-booking/service-booking
+  - name: peak-booking/backend
     newTag: local
