@@ -21,17 +21,19 @@
 
 ## 프로젝트 개요
 
-이 프로젝트는 `00:00`에 오픈되는 한정 수량 숙소 상품 예약 시스템을 구현합니다. 대상 상품 재고는 `10개`로 제한되며, 오픈 직후 짧은 시간 동안 높은 트래픽이 몰리는 상황을 가정합니다.
+이 프로젝트는 `00:00`에 오픈되는 `10개 한정` 초특가 숙소 상품 예약 시스템을 구현합니다. 오픈 직후 짧은 시간 동안 높은 트래픽이 몰리며, 프로모션 중 인프라 증설(scale-up/out)이 제한적인 상황을 가정합니다.
 
 핵심 목표는 단순히 성공 예약을 처리하는 것이 아니라, 압박 상황에서도 정합성을 증명하는 것입니다.
 
-- 고정 재고 수량을 초과하는 초과 판매 방지
+- `10개` 재고 수량을 초과하는 초과 판매 방지
 - 결제 실패 또는 시스템 장애 후 재고가 영구히 잠기는 문제 방지
 - 중복 클릭과 재시도에 대한 공정하고 멱등적인 처리
 - Redis, DB, 결제 경로 장애 시 예측 가능한 degraded behavior
 - Redis admission, DB 최종 정합성, 멱등성, fallback, 부하 테스트에 대한 의사결정 기록
 
 ## 기술 스택
+
+아래 스택은 현재 원격 `main`에 반영된 bootstrap 기준이며, [DECISIONS.md](docs/decisions/DECISIONS.md)의 DEC-000에서 승인된 프로젝트 baseline입니다.
 
 | 영역 | 선택 |
 |---|---|
@@ -76,7 +78,7 @@
     └── skills
 ```
 
-현재 백엔드는 단일 Spring Boot 애플리케이션으로 시작합니다. 애플리케이션은 stateless 서버로 유지하고, Kubernetes replica를 늘려 scale out하는 방식을 기본으로 둡니다.
+현재 백엔드는 단일 Spring Boot 애플리케이션으로 시작합니다. 애플리케이션은 stateless 서버로 유지하지만, 피크 순간의 정합성과 붕괴 방지는 단순 replica 증설이 아니라 admission, backpressure, RDB 최종 정합성 guard로 설명해야 합니다.
 
 - `backend/src/main/java/com/peakbooking`: 단일 Spring Boot 애플리케이션 진입점
 - `backend/src/main/java/com/peakbooking/common`: 공통 응답/예외/JPA auditing/CORS/OpenAPI 설정
@@ -123,7 +125,7 @@ kubectl kustomize k8s/local
 
 | Method | Endpoint | 목적 | 상태 |
 |---|---|---|---|
-| `GET` | `/api/v1/checkout/{productId}` | 상품, 숙박 기간, 가격, 사용자 포인트 등 주문서 진입 정보를 조회합니다. | 예정 |
+| `GET` | `/api/v1/checkout/{productId}` | 상품, 숙박 기간, 가격, 사용자 Y포인트 등 주문서 진입 정보를 조회합니다. | 예정 |
 | `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 선점/확정, 최종 예약 생성을 수행합니다. | 예정 |
 | `GET` | `/api/v1/health` | 서비스 기동 및 smoke/load-test용 헬스체크입니다. | 구현 |
 
@@ -136,7 +138,7 @@ kubectl kustomize k8s/local
 | [요구사항](docs/requirements.md) | 공개 가능한 요구사항 요약 |
 | [문서 지도](docs/README.md) | 프로젝트 문서 인덱스 |
 | [의사결정 기록](docs/decisions/DECISIONS.md) | Redis, 멱등성, fallback, 부하 테스트 등 주요 trade-off |
-| [출처 기반 리서치](docs/research/source-backed-research-note.md) | Redis/MySQL/PostgreSQL/idempotency/resilience 관련 주장과 출처 |
+| [출처 기반 리서치](docs/research/source-backed-research-note.md) | Redis/MySQL/idempotency/resilience/PG Mock 관련 주장과 출처 |
 | [Mock Interview Design](docs/system-design/mock-interview.md) | 시스템 설계 사고 흐름 문서 |
 | [Software Design Document](docs/system-design/sdd.md) | 정식 SDD 작업 문서 |
 | [Test-First Scenarios](docs/testing/test-first-scenarios.md) | 장애, 경쟁, 중복, 과부하 시나리오를 테스트로 고정하기 위한 문서 |

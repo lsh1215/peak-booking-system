@@ -1,234 +1,184 @@
-# {시스템 이름} — System Design (Mock Interview Style)
+# Peak Booking System — System Design (Mock Interview Style)
 
 > **문서 목적**
-> 시스템 디자인 모의 인터뷰(45–60분) 흐름으로 이 프로젝트의 설계 판단을 채워나가는 작업 문서다. ByteByteGo / Hello Interview / Donne Martin system-design-primer가 공통적으로 권장하는 3단계(Clarifying → High Level → Drill Down) + 선택적 Wrap-Up으로 구성한다.
+> 현재 `docs/requirements.md`에 명시된 요구사항만 기준으로 시스템 설계를 쉽게 설명하는 작업 문서다. 요구사항에 없는 항목은 확정하지 않고 `Open Questions` 또는 `DECISIONS.md`의 미결정 쟁점으로 보낸다.
 
 ---
 
-## 0. 메타데이터 (선택)
+## 0. Metadata
 
 | 항목 | 값 |
 |---|---|
-| Topic | {예: URL Shortener} |
-| Interviewer Persona | {예: Big Tech L5 / Staff Engineer} |
-| Time Budget | 45 / 60 min |
-| Date | YYYY-MM-DD |
+| Topic | Limited-stock booking/payment backend |
+| Reviewer Persona | Backend/System Design reviewer |
+| Date | 2026-05-30 |
+| Requirement Source | `docs/requirements.md` |
+| Decision Rule | 기술 선택의 최종 권한자는 user이며, 이 문서는 임의로 결정을 확정하지 않는다. |
 
 ---
 
 ## 1. Clarifying Questions
 
-> _Why this section exists_
-> 문제 범위를 좁히고 인터뷰어와 공통 전제를 맞춘다. **너무 빨리 설계로 넘어가는 것이 가장 흔한 실패 원인.** 5분 이내, 3–5개 질문이 적정.
+### 1.1 Functional Requirements From Current Requirements
 
-### 1.1 Functional Requirements
-> _What goes here_
-> "유저는 …할 수 있어야 한다" 형태로 핵심 기능 3개에 집중. 부가 기능은 나중에.
+- [x] FR-1: 사용자는 주문서 진입 시 상품명, 가격, 입/퇴실 시간, 가용 Y포인트 등 checkout 정보를 조회할 수 있다.
+- [x] FR-2: 사용자는 주문서 정보를 제출해 결제를 진행하고 최종 주문/예약 생성을 요청할 수 있다.
+- [x] FR-3: 시스템은 신용카드, `Y페이`, `Y포인트` 결제를 지원한다.
+- [x] FR-4: 시스템은 `신용카드 + Y포인트`, `Y페이 + Y포인트` 복합 결제를 허용하고, 신용카드와 `Y페이` 혼용은 막아야 한다.
+- [x] FR-5: 짧은 간격의 연속 결제 요청이 중복 처리되지 않도록 멱등성을 제공해야 한다.
+- [x] FR-6: Redis 장애 시 fallback 전략과 근거를 제시해야 한다.
+- [x] FR-7: 한도 초과 등 결제 실패 케이스에 대한 대응 로직을 설계해야 한다.
 
-- [ ] FR-1: {예: 긴 URL을 짧은 URL로 변환할 수 있다}
-- [ ] FR-2: {예: 짧은 URL로 접속하면 원본으로 리다이렉트된다}
-- [ ] FR-3: {예: 클릭 통계를 조회할 수 있다}
+### 1.2 Non-Functional / Quality Requirements From Current Requirements
 
-### 1.2 Non-Functional Requirements (정량화 필수)
-> _What goes here_
-> "낮은 지연" 같은 형용사가 아니라 숫자로. availability / consistency / latency / scalability / durability 중 시스템에 맞는 top 3–5개를 골라 수치 명시.
-
-- [ ] NFR-1: {예: 리다이렉트 p99 < 100ms}
-- [ ] NFR-2: {예: 99.99% availability (월 4분 다운타임 허용)}
-- [ ] NFR-3: {예: write-after-read consistency 불필요, eventual consistency OK}
+- [x] NFR-1: `00시` 트래픽 집중 상황에서 초과판매와 미달 판매가 발생하지 않도록 재고 정합성을 보장해야 한다.
+- [x] NFR-2: 모든 사용자가 동등한 확률로 상품을 구매할 수 있는 구조를 고민해야 한다.
+- [x] NFR-3: 대상 초특가 숙소 상품 재고는 `10개`로 제한된다.
+- [x] NFR-4: 평시 `50 TPS`, 프로모션 시작 후 약 `1~5분` 동안 `500~1000 TPS` 급증을 고려해야 한다.
+- [x] NFR-5: 인프라 증설(scale-up/out)이 제한적인 상황을 가정한다.
+- [x] NFR-6: 시스템 붕괴를 막기 위한 구조와 선택 근거를 `DECISIONS.md`에 기록해야 한다.
+- [x] NFR-7: 실제 PG사 연동은 생략하되, 실제 PG의 결제 승인/조회/취소 또는 웹훅 흐름과 유사한 Mock interface로 구조적 흐름이 이어져야 한다.
+- [x] NFR-8: 회원 인증 및 로그인 보안 처리는 구현 범위에서 제외한다.
 
 ### 1.3 Scale & Constraints
-> _What goes here_
-> 트래픽 규모와 데이터 특성. 이 숫자가 뒤에 나올 추정·샤딩·캐시 결정의 근거가 된다.
 
-| 항목 | 값 | 근거 |
-|---|---|---|
-| DAU | {1M} | {가정} |
-| 읽기:쓰기 비율 | {100:1} | {링크 1개 만들고 100번 클릭} |
-| 데이터 보존 기간 | {5년} | |
-| 글로벌 여부 | {US-only / Global} | |
-| 평균 페이로드 크기 | {200B 원본 URL} | |
+| 항목 | 현재 요구사항 기준 |
+|---|---|
+| Stock quantity | `10` units |
+| Normal traffic | `50 TPS` |
+| Peak traffic | `500~1000 TPS` |
+| Peak duration | `1~5분` |
+| App topology | 애플리케이션 서버 `2대 이상` 분산 환경 |
+| Language / Framework | Java 21 / Spring Boot 3.x. DEC-000에서 user가 승인한 baseline |
+| Concrete RDB | MySQL 8. DEC-000에서 user가 승인한 baseline |
+| Cache | Redis |
+| Load-test tool | k6. DEC-000에서 user가 승인한 baseline |
+| Observability stack | LGTM stack. DEC-000에서 user가 승인한 baseline |
 
-### 1.4 Out of Scope (명시적 제외)
-> _Why_
-> 인터뷰어와 합의해 시간을 사야 한다. "인증/결제/관리자 도구는 다음 단계로 두자"고 못 박는다.
+### 1.4 Out of Scope / Not Currently Specified
 
-- [ ] {예: 사용자 인증 — 이미 OAuth로 해결됐다고 가정}
-- [ ] {예: 결제 / 요금제}
-- [ ] {예: 관리자 대시보드}
+- [x] 실제 PG사와의 운영 계약/API 세부 연동은 생략한다.
+- [x] 회원 인증 및 로그인 보안 처리는 구현 범위에서 제외한다.
+- [x] 숙소 검색, 추천, 리뷰, 관리자 백오피스는 현재 요구사항에 없다.
+- [x] 멀티 리전 active-active, 글로벌 트래픽 라우팅, CDN 최적화는 현재 요구사항에 없다.
+- [x] production-grade waiting room/bot mitigation 제품은 현재 요구사항에 없다.
+- [x] UI wireframe, mobile flow, SEO, analytics pipeline은 현재 요구사항에 없다.
+- [x] Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 DEC-000에서 user가 승인한 baseline이다.
 
 ---
 
 ## 2. High Level Design
 
-> _Why this section exists_
-> 전체 시스템의 뼈대를 스케치하고 인터뷰어의 동의를 얻는다. 박스/화살표가 없으면 안 된다 — 말로만 설명하지 말 것.
-
 ### 2.1 Back-of-the-Envelope Estimation
-> _What goes here_
-> 설계 결정을 정당화하는 숫자. 5분 초과 금지. 단위 표기 필수.
->
-> 공식
-> - QPS = (DAU × 사용자당 일일 요청 수) ÷ 86,400
-> - Peak QPS ≈ 평균 × 10
-> - Storage = 레코드 수 × 레코드 크기 × 복제 계수
-> - Bandwidth = QPS × 평균 응답 크기 × 8 (bps)
 
-| Metric | 계산 | 값 |
+| Metric | 계산 | 값 / 해석 |
 |---|---|---|
-| Write QPS (avg) | {1M DAU × 1 write/day ÷ 86,400} | {≈ 12} |
-| Write QPS (peak) | {avg × 10} | {≈ 120} |
-| Read QPS (peak) | {write × 100} | {≈ 12,000} |
-| 5년 누적 레코드 수 | {12 × 86,400 × 365 × 5} | {≈ 1.9B} |
-| Storage | {1.9B × 500B × 3} | {≈ 2.8 TB} |
-| Egress Bandwidth | {12,000 × 1KB × 8} | {≈ 96 Mbps} |
+| Normal write pressure | 요구사항 기준 | 약 `50 TPS` |
+| Peak write pressure | 요구사항 기준 | 약 `500~1000 TPS` |
+| Peak window attempts | `500~1000 TPS * 60~300초` | 약 `30,000~300,000` booking attempts |
+| Successful bookings | `min(10, valid successful attempts)` | 최대 `10`건 |
+| Failure-dominant ratio | peak attempts 대비 성공 가능 건수 `10` | 대부분 요청은 빠른 실패, 재응답, 또는 대기/거절 경로를 타야 할 가능성이 높음 |
 
-### 2.2 Core Entities (Data Model 초안)
-> _What goes here_
-> 핵심 명사만 나열. 컬럼은 5개 이내로 시작. 풀 스키마는 Drill Down에서.
+### 2.2 Core Entities (Conceptual, Not Final DDL)
 
-- **User**: id, email, created_at
-- **{Entity2}**: ...
-- **{Entity3}**: ...
+- **User**: 인증 시스템에서 전달된 사용자 식별자, 가용 Y포인트.
+- **Product / Accommodation**: 상품명, 가격, 입/퇴실 시간, 판매 시작 시각.
+- **Inventory**: 상품별 한정 재고 수량과 현재 예약/확정 상태.
+- **Booking / Order**: 주문서 입력을 기반으로 생성되는 예약/주문 상태.
+- **Payment**: 결제 수단, 금액, 결제 결과, 외부 결제 참조.
+- **Idempotency Record**: 연속 결제 요청의 중복 처리를 막기 위한 식별/상태 저장소. 구체 key/hash/replay 정책은 DEC-004에서 결정한다.
 
-### 2.3 API Contract
-> _What goes here_
-> Functional Requirement 1:1 매핑. REST 기본. 인증 토큰은 헤더.
+### 2.3 API Contract (Draft)
 
-| Method | Path | Purpose | Auth |
+| Method | Path | Purpose | Notes |
 |---|---|---|---|
-| `POST` | `/api/v1/{resource}` | {FR-1} | Bearer |
-| `GET` | `/api/v1/{resource}/{id}` | {FR-2} | - |
-| `GET` | `/api/v1/{resource}/{id}/stats` | {FR-3} | Bearer |
+| `GET` | `/api/v1/checkout/{productId}` | 상품/가격/입퇴실/Y포인트 등 주문서 정보 조회 | 인증 방식은 범위 밖. 사용자 식별자는 전달된다고 가정 |
+| `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 정합성 확인, 최종 주문/예약 생성 | 멱등성 전달 방식은 미결정 |
 
 ### 2.4 Architecture Diagram
-> _What goes here_
-> 클라이언트 → LB → API → 캐시/DB/큐의 박스+화살표. ASCII가 가장 빠르다.
 
-```
-┌────────┐   ┌─────┐   ┌──────────┐   ┌────────┐
-│ Client │ → │ LB  │ → │ API Tier │ → │ Cache  │
-└────────┘   └─────┘   └────┬─────┘   └────┬───┘
-                            │              │ miss
-                            ▼              ▼
-                       ┌────────┐    ┌─────────┐
-                       │  Queue │    │  Primary│
-                       └───┬────┘    │   DB    │
-                           ▼         └─────────┘
-                       ┌────────┐
-                       │ Worker │
-                       └────────┘
+```mermaid
+flowchart LR
+    Client[Client] --> LB[Load Balancer]
+    LB --> App[Spring Boot App Replicas]
+
+    App -->|GET checkout| Checkout[Checkout Read Path]
+    Checkout --> Redis[(Redis Cache / Coordination)]
+    Checkout --> RDB[(MySQL or MariaDB)]
+
+    App -->|POST booking| Booking[Booking Write Path]
+    Booking --> Idem[Idempotency Guard<br/>policy pending]
+    Booking --> PaymentPolicy[Payment Combination Policy]
+    Booking --> RedisFallback[Redis Fallback / Admission Policy<br/>pending]
+    Booking --> RDBGuard[RDB Inventory Correctness Guard<br/>pending]
+    Booking --> PaymentPort[Payment Provider Interface<br/>external PG mocked]
+    PaymentPort --> FakePG[Mock PG<br/>confirm/query/cancel/webhook-like]
+
+    RDBGuard --> RDB
+    Idem --> RDB
 ```
 
 ---
 
-## 3. Drill Down
+## 3. Drill Down: Design Surfaces To Decide
 
-> _Why this section exists_
-> Non-functional requirement 중 High Level이 아직 충족 못한 것을 메우는 단계. **시니어는 인터뷰어 힌트를 기다리지 않고 직접 병목을 찾아 제안한다.** 모든 영역을 고르게 파지 말고 가장 중요한 1–2개를 깊게.
+### 3.1 Inventory Correctness
 
-### 3.1 Database
-> _Decisions to make_
-> SQL vs NoSQL, 샤딩 전략, 복제 토폴로지, 인덱스, 파티셔닝.
+- 현재 요구사항은 `10개 한정` 재고에서 초과판매와 미달 판매를 모두 막아야 한다고 말하지만, 구체 DB guard 방식은 지정하지 않는다.
+- RDB final guard, Redis admission, queue/waiting strategy 등은 모두 후보일 뿐이다.
+- 결정 필요: 재고를 어떤 상태 모델로 관리할지, RDB에서 어떤 제약/트랜잭션으로 보장할지.
 
-- **선택**: {예: PostgreSQL (강한 일관성 + 단순한 access pattern)}
-- **선택 근거**: {access pattern, 트랜잭션 필요 여부, 스키마 진화 빈도}
-- **샤딩 키**: {예: hash(short_code) — 핫스팟 방지}
-- **복제**: {예: 1 primary + 2 read replica, async replication}
-- **인덱스**: {예: short_code unique, user_id + created_at composite}
+### 3.2 Fairness
 
-### 3.2 Cache
-> _Decisions to make_
-> 어디에(앱 / CDN / DB), 무엇을(자주 읽고 안 바뀌는 것), 어떤 전략(cache-aside / write-through / write-around), eviction(LRU + TTL).
+- 현재 요구사항은 "모든 사용자가 동등한 확률"을 요구하지만, FIFO, random, first-attempt timestamp, 사용자당 1회 제한 중 무엇인지는 정하지 않는다.
+- 중복 클릭/재시도가 성공 확률을 높이면 공정성 요구를 해칠 수 있다.
+- 결정 필요: 공정성의 테스트 가능한 정의.
 
-- **레이어**: {예: Redis 클러스터 (앱 레이어), CDN (정적 자산)}
-- **캐싱 대상**: {예: short_code → original_url 매핑, 사용자 통계 집계}
-- **전략**: {예: cache-aside (lazy load), TTL 24h}
-- **Eviction**: {예: LRU + TTL}
-- **Invalidation**: {예: 원본 URL은 immutable이므로 invalidation 불필요}
+### 3.3 Idempotency
 
-### 3.3 Load Balancer
-> _Decisions to make_
-> L4(빠름) vs L7(라우팅 규칙), sticky session 필요성, health check.
+- 현재 요구사항은 "짧은 간격의 연속 결제 요청이 중복 처리되지 않아야 한다"까지만 확정한다.
+- `Idempotency-Key`, request hash, stored response replay, conflict response는 후보 정책이다.
+- 결정 필요: 멱등성 key 범위, body 비교 여부, 저장 TTL, 처리 중 상태 복구 방식.
 
-- **계층**: {L4 / L7}
-- **알고리즘**: {round-robin / least-conn / consistent hash}
-- **Sticky session**: {불필요 — stateless 설계}
-- **Health check**: {`/healthz` 200, 5s 간격}
+### 3.4 Redis Failure And Fallback
 
-### 3.4 Bottlenecks & Mitigations
-> _Decisions to make_
-> 어디가 먼저 깨질지 식별하고 완화책 제시.
+- 현재 요구사항은 Redis 장애 fallback 전략과 근거를 요구한다.
+- fail-closed, bounded DB fallback, queue/degraded mode 등은 모두 선택지다.
+- 결정 필요: Redis 장애 시 write path를 막을지, 제한적으로 DB fallback할지, fallback budget을 어떻게 둘지.
 
-| Bottleneck | 식별 근거 | 완화 |
+### 3.5 Payment Failure And PG Abstraction
+
+- 실제 PG 연동은 생략하지만, 인터페이스를 통해 흐름은 이어져야 한다.
+- Toss Payments와 PortOne 공식 문서를 기준으로 보면 실제 PG는 결제 승인, 결제 조회, 취소, 웹훅 또는 상태 동기화 흐름을 제공한다.
+- 따라서 Mock PG도 `confirm`, `query/status`, `cancel`, `status changed webhook/event`, timeout/unknown 시뮬레이션을 후보 interface로 둔다.
+- 결제 실패가 최종 주문/예약을 만들면 안 된다는 점은 요구사항상 자연스럽게 도출된다.
+- 결정 필요: 결제 요청과 DB transaction을 분리할지, 실패/timeout/unknown 결과를 어떤 상태로 다룰지.
+
+### 3.6 High Availability / Overload Defense
+
+- `500~1000 TPS`를 `1~5분` 동안 고려해야 하지만, p95/p99, timeout, pool size, 실패 응답 기준은 지정되지 않았다.
+- 결정 필요: 시스템 붕괴를 무엇으로 정의할지, load shedding/backpressure 기준을 어떤 지표로 검증할지.
+
+---
+
+## 4. Open Decisions
+
+| ID | Topic | Why It Is Open |
 |---|---|---|
-| {DB 읽기 과부하} | {12K read QPS, 단일 노드 한계} | {Redis 캐시 + read replica} |
-| {핫 short_code} | {바이럴 링크는 1개가 전체 트래픽 대부분} | {consistent hashing + 노드별 로컬 캐시} |
-| {ID 생성 경합} | {단일 시퀀스} | {snowflake / base62 random + 충돌 재시도} |
-
-### 3.5 Failure Modes
-> _Decisions to make_
-> SPOF, 장애 전파, graceful degradation.
-
-- **SPOF**: {예: primary DB → 자동 failover with Patroni}
-- **Cache 다운**: {예: DB 직접 조회 fallback, latency 증가는 감수}
-- **재시도**: {지수 백오프 + jitter, 최대 3회}
-- **서킷 브레이커**: {downstream 5xx 50% 초과 시 30s open}
-
-### 3.6 Monitoring & Observability
-> _Decisions to make_
-> 무엇을 보고 무엇에 알람을 걸 것인가.
-
-- **Metrics**: QPS, p50/p99 latency, 에러율, 캐시 hit ratio, DB connection pool
-- **Tracing**: 분산 추적 (OpenTelemetry) — 리다이렉트 → DB 조회까지
-- **Alerts**: p99 > 200ms / 5min, error rate > 1% / 5min, cache hit < 80%
-- **Logs**: 구조화 JSON, request_id correlation
-
-### 3.7 Security (선택)
-> _Decisions to make_
-> 인증/인가, rate limiting, 입력 검증, abuse 방지.
-
-- {예: per-user rate limit 100 req/min, per-IP 1000 req/min}
-- {예: malicious URL blocklist (Google Safe Browsing)}
-- {예: HTTPS only, HSTS}
+| DEC-000 | 현재 repo stack/tooling 채택 | Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 user가 승인한 baseline이다. |
+| DEC-001 | 재고 상태 모델/공정성 정의 | 재고 수량은 `10개`로 확정되어 있고, 공정성 알고리즘은 미정이다. |
+| DEC-002 | Redis 장애 fallback 정책 | fallback 전략 제출은 요구되지만 정책은 미정이다. |
+| DEC-003 | RDB 재고 정합성 guard | MySQL/MariaDB 계열은 요구되지만 구체 locking/constraint 방식은 미정이다. |
+| DEC-004 | 멱등성 정책 | 중복 처리 방지는 요구되지만 key/hash/replay/TTL 정책은 미정이다. |
+| DEC-005 | 결제 실패/timeout 처리와 PG abstraction | 실제 PG 연동은 생략되지만 실패 흐름과 interface contract는 필요하다. |
+| DEC-006 | 결제 수단 확장 구조 | Booking API 수정 최소화 구조가 필요하지만 패턴 선택은 미정이다. |
+| DEC-007 | TPS 급증 방어 | 시스템 붕괴 방지 구조가 필요하지만 backpressure/load shedding 기준은 미정이다. |
+| DEC-008 | 테스트/관측/부하 전략 | k6/LGTM은 승인되었고, 부하 시나리오와 pass/fail 기준은 미정이다. |
 
 ---
 
-## 4. Wrap-Up
+## 5. References
 
-> _Why this section exists_
-> Alex Xu 4단계의 마지막. 3–5분 이내로 압축.
-
-### 4.1 트레이드오프 요약
-- {선택한 길과 선택하지 않은 길, 그 이유 1줄씩}
-
-### 4.2 운영 고려사항
-- {배포 전략, 마이그레이션, 롤백}
-
-### 4.3 다음 단계 / 확장 방향
-- {예: 글로벌 확장 시 멀티 리전 + GeoDNS}
-- {예: 분석 파이프라인 → 데이터 웨어하우스}
-- {예: ML 기반 abuse detection}
-
----
-
-## 부록: 자주 빠뜨리는 것 체크리스트
-
-- [ ] Non-functional requirement를 **숫자로** 적었는가
-- [ ] QPS 추정에 **peak 배수**(×10)를 곱했는가
-- [ ] Architecture diagram에 **데이터 흐름 방향**이 있는가
-- [ ] DB 선택을 **access pattern**으로 정당화했는가
-- [ ] Cache의 **eviction 정책**을 명시했는가
-- [ ] **SPOF**를 적어도 1개 식별했는가
-- [ ] 모니터링에 **알람 임계값**이 있는가
-- [ ] Wrap-up에서 **트레이드오프**를 1번 더 환기했는가
-
----
-
-## 참고 자료
-
-- [ByteByteGo — A Framework for System Design Interviews](https://bytebytego.com/courses/system-design-interview/a-framework-for-system-design-interviews)
-- [Hello Interview — Delivery Framework](https://www.hellointerview.com/learn/system-design/in-a-hurry/delivery)
-- [Donne Martin — system-design-primer](https://github.com/donnemartin/system-design-primer)
-- [Avinash Billakurthi — Designing a Scalable URL Shortener](https://www.linkedin.com/pulse/designing-scalable-efficient-url-shortener-system-avinash-billakurthi-kwroe/)
-- [interviewing.io — 3-Step Framework](https://interviewing.io/guides/system-design-interview/part-three)
+- [Requirements](../requirements.md)
+- [Decision log](../decisions/DECISIONS.md)
+- [Source-backed research note](../research/source-backed-research-note.md)

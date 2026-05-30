@@ -21,17 +21,19 @@ Limited-stock booking and payment backend for a midnight flash-sale scenario.
 
 ## Project Overview
 
-This project implements a booking system for accommodation inventory that opens at `00:00` with only `10` available units. The system assumes two or more application server instances and a short burst of high traffic immediately after opening.
+This project implements a booking system for a `10-unit` limited accommodation deal that opens at `00:00`. The system assumes two or more application server instances, a short burst of high traffic immediately after opening, and constrained scale-up/out during the promotion.
 
 The core design goal is not only to process successful bookings, but to prove correctness under pressure:
 
-- no overselling beyond the fixed stock count
+- no overselling beyond the fixed `10-unit` stock count
 - no permanent stock leak after payment failure or system failure
 - fair handling of duplicate clicks and retries
 - predictable degradation during Redis, DB, or payment instability
 - documented trade-offs for Redis admission, DB final consistency, idempotency, fallback, and load testing
 
 ## Tech Stack
+
+The stack below reflects the current `origin/main` bootstrap and is accepted as the project baseline in DEC-000 of [DECISIONS.md](docs/decisions/DECISIONS.md).
 
 | Area | Choice |
 |---|---|
@@ -76,7 +78,7 @@ The core design goal is not only to process successful bookings, but to prove co
     └── skills
 ```
 
-The backend now starts as a single Spring Boot application. The application stays stateless and scales out by increasing Kubernetes replicas.
+The backend now starts as a single Spring Boot application. The application stays stateless, but peak-time correctness and collapse prevention must be explained through admission control, backpressure, and the final RDB correctness guard rather than relying only on adding replicas.
 
 - `backend/src/main/java/com/peakbooking`: single Spring Boot application entrypoint
 - `backend/src/main/java/com/peakbooking/common`: common response/exception/JPA auditing/CORS/OpenAPI configuration
@@ -123,7 +125,7 @@ Initial API scope:
 
 | Method | Endpoint | Purpose | Status |
 |---|---|---|---|
-| `GET` | `/api/v1/checkout/{productId}` | Read checkout information such as product, stay dates, price, and user point balance. | Planned |
+| `GET` | `/api/v1/checkout/{productId}` | Read checkout information such as product, stay dates, price, and user Y-point balance. | Planned |
 | `POST` | `/api/v1/bookings` | Validate payment inputs, enforce idempotency, reserve/confirm stock, and create a final booking. | Planned |
 | `GET` | `/api/v1/health` | Service startup and smoke/load-test health check. | Implemented |
 
@@ -136,7 +138,7 @@ Final request/response schemas will be documented after the system design and do
 | [Requirements](docs/requirements.md) | Public-safe requirements summary. |
 | [Documentation Map](docs/README.md) | Index of project documents. |
 | [Decisions](docs/decisions/DECISIONS.md) | Redis, idempotency, fallback, load testing, and other trade-offs. |
-| [Source-Backed Research](docs/research/source-backed-research-note.md) | Redis/MySQL/PostgreSQL/idempotency/resilience claims with sources. |
+| [Source-Backed Research](docs/research/source-backed-research-note.md) | Redis/MySQL/idempotency/resilience/PG Mock claims with sources. |
 | [Mock Interview Design](docs/system-design/mock-interview.md) | Working system-design discussion document. |
 | [Software Design Document](docs/system-design/sdd.md) | Formal SDD working document. |
 | [Test-First Scenarios](docs/testing/test-first-scenarios.md) | Failure, race, duplicate, and overload scenarios to pin as tests. |

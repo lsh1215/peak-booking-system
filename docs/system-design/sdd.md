@@ -1,391 +1,413 @@
-# {시스템 이름} — Software Design Document
+# Peak Booking System — Software Design Document
 
 > **문서 목적**
-> 이 프로젝트의 Software Design Document(SDD)를 채워나가는 작업 문서다. IEEE 1016-2009 학술 구조 + Atlassian 실무 가이드 + CMS 엔터프라이즈 항목 + Notion 모던 메타데이터를 통합한 형태로, **결정의 근거와 추적 가능성**을 남기는 데 목적이 있다.
+> 현재 `docs/requirements.md`에 명시된 요구사항을 구현 가능한 설계 항목으로 풀어 쓰되, 요구사항에 없는 기술 선택은 확정하지 않고 `Open Decision`으로 남긴다. 기술 결정의 최종 권한자는 user다.
 
 ---
 
 ## 0. Document Metadata
 
-> _Why_
-> 변경 이력과 책임자를 명시해 문서를 "팀 자산"으로 만든다. 메타데이터가 없는 SDD는 시간이 지나면 신뢰도를 잃는다.
-
 | 항목 | 값 |
 |---|---|
-| Document Title | {시스템 이름} SDD |
-| Version | 0.1 (Draft) |
-| Status | Draft / Proposed / Accepted / Deprecated |
-| Author(s) | {이름} |
-| Reviewer(s) | {이름} |
-| Last Updated | YYYY-MM-DD |
-| Related Documents | {PRD, ADR-001, etc.} |
+| Document Title | Peak Booking System SDD |
+| Version | 0.4 (Requirements-aligned Draft) |
+| Status | Draft / Decisions Pending |
+| Author(s) | Sanghun Lee + Codex |
+| Last Updated | 2026-05-30 |
+| Requirement Source | `docs/requirements.md` |
+| Related Documents | `docs/decisions/DECISIONS.md`, `docs/system-design/mock-interview.md`, `docs/testing/test-first-scenarios.md`, `docs/research/source-backed-research-note.md` |
 
 ### 0.1 Revision History
 
 | Version | Date | Author | Change |
 |---|---|---|---|
-| 0.1 | YYYY-MM-DD | {이름} | Initial draft |
+| 0.1 | 2026-05-30 | Sanghun Lee + Codex | Initial FR/NFR extraction from previous requirements |
+| 0.2 | 2026-05-30 | Sanghun Lee + Codex | Removed template-only sections and added Mermaid diagrams |
+| 0.3 | 2026-05-30 | Sanghun Lee + Codex | Realigned to current extracted requirements and demoted unapproved choices to open decisions |
+| 0.4 | 2026-05-30 | Sanghun Lee + Codex | Added fixed stock=10, Y페이/Y포인트, constrained scale-up/out, and source-backed Mock PG assumptions |
 
 ---
 
 ## 1. Introduction
 
-> _Why_
-> 독자가 본문을 읽기 전에 "이 문서가 무엇이고 왜 존재하는지"를 30초 안에 파악하게 한다. PRD가 "무엇을 만들 것인가"라면 SDD는 "어떻게 만들 것인가"의 시작점.
-
 ### 1.1 Purpose
-> _What goes here_
-> 이 SDD가 다루는 시스템 / 모듈, 작성 목적, 대상 독자 (예: backend 팀, SRE, 보안 검토자).
 
-{이 문서는 ... 시스템의 설계를 기술한다. 대상 독자는 ...}
+이 문서는 `00시` 프로모션 시작 시 트래픽이 몰리는 `10개 한정` 초특가 숙소 상품의 주문서 조회, 결제, 최종 주문/예약 생성 흐름을 설계한다.
 
 ### 1.2 Scope
-> _What goes here_
-> 문서가 커버하는 범위. "이 SDD는 X를 다루며, Y는 별도 문서에서 다룬다."
 
-- **In scope**: {모듈 / 컴포넌트 / 인터페이스}
-- **Out of scope**: {별도 문서로 분리된 영역}
+- **In scope**: Checkout 조회 API, Booking 생성 API, 재고 정합성/공정성, 멱등성, 결제 수단 조합, Redis 장애 fallback, 결제 실패 처리, 산출물 문서화.
+- **Out of scope by requirements**: 실제 PG사 연동, 회원 인증 및 로그인 보안 처리.
+- **Not specified by current requirements**: 한 사용자당 구매 제한, idempotency key/hash 세부 정책, DB locking 방식, fairness 알고리즘, multi-region/CDN/waiting-room/bot mitigation.
 
-### 1.3 References
-> _What goes here_
-> PRD, ADR, 외부 표준, 관련 RFC.
+### 1.3 Confirmed Requirement Facts
 
-- [PRD-{n}] {링크}
-- [ADR-{n}] {링크}
-- [{외부 표준}] {링크}
+| Area | Confirmed Fact |
+|---|---|
+| Language | Java 8 이상 또는 Kotlin |
+| Framework | Spring Boot 2.7 이상 |
+| RDB | MySQL 또는 MariaDB 계열 |
+| Cache | Redis |
+| Infra | 애플리케이션 서버 2대 이상의 분산 환경 |
+| Stock | 초특가 숙소 상품 `10개 한정` |
+| Traffic | 평시 `50 TPS`, `00시`부터 `1~5분` 동안 `500~1000 TPS` |
+| APIs | `GET Checkout`, `POST Booking` |
+| Payment methods | 신용카드, Y페이, Y포인트 |
+| Allowed combinations | 신용카드+Y포인트, Y페이+Y포인트 |
+| Disallowed combination | 신용카드와 Y페이 혼용 |
+| Explicit exclusions | 실제 PG사 연동, 회원 인증/로그인 보안 |
+
+### 1.4 Accepted Project Baseline Decisions
+
+DEC-000에 따라 Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM stack은 user가 직접 승인한 프로젝트 baseline이다. 이 선택들은 현재 요구사항의 최소 조건을 만족하며, 더 이상 미결정 사항이 아니다.
 
 ---
 
 ## 2. System Overview
 
-> _Why_
-> 본격 설계 진입 전 "시스템이 무엇을 하고 어디에 위치하는지" 2–3문단으로 압축. 다이어그램 1개 권장 (context diagram).
+본 시스템은 주문서 진입 정보 조회와 결제/예약 완료 요청을 처리하는 Spring Boot 기반 backend다. Redis는 요구사항상 필수 cache 구성요소이며, Redis 장애 시 fallback 전략이 필요하다. RDB는 MySQL/MariaDB 계열이어야 하지만, 최종 재고 정합성을 어떤 테이블/제약/transaction 방식으로 보장할지는 미정이다.
 
-{본 시스템은 ... 역할을 수행한다. 외부적으로는 ... 시스템과 상호작용하며, 내부적으로는 ... 컴포넌트로 구성된다.}
-
-```
-┌─ External ─────────┐    ┌─ This System ─┐    ┌─ External ─┐
-│ {업스트림}          │ →  │   {시스템명}    │ →  │ {다운스트림}│
-└────────────────────┘    └────────────────┘    └────────────┘
+```mermaid
+flowchart LR
+    Client[Client] --> LB[Load Balancer]
+    LB --> App[Spring Boot App Replicas]
+    App --> Redis[(Redis)]
+    App --> RDB[(MySQL or MariaDB)]
+    App --> PaymentPort[Payment Provider Interface]
+    PaymentPort --> StubPG[Mock PG<br/>confirm/query/cancel/event]
 ```
 
 ---
 
 ## 3. Goals and Non-Goals
 
-> _Why_
-> Atlassian / Notion / Google 디자인 독의 공통 항목. **무엇을 하지 않을지 명시하는 것이 무엇을 할지 명시하는 것만큼 중요하다.**
-
 ### 3.1 Goals
-> _What goes here_
-> 측정 가능한 목표. "빠르게" 같은 형용사 대신 "p99 < 100ms"처럼.
 
-- G-1: {예: API p99 latency < 100ms 달성}
-- G-2: {예: 99.99% availability}
-- G-3: {예: 2026년 Q3까지 첫 배포}
+- G-1: `10개 한정` 상품에서 초과판매와 영구 미달판매가 발생하지 않도록 재고 정합성을 보장한다.
+- G-2: 모든 사용자가 동등한 확률로 상품을 구매할 수 있는 구조를 설계한다.
+- G-3: 짧은 간격의 연속 결제 요청이 중복 처리되지 않도록 멱등성을 제공한다.
+- G-4: 신용카드, Y페이, Y포인트와 허용 복합 결제를 지원한다.
+- G-5: Redis 장애 fallback 전략과 결제 실패 대응 로직을 설계하고 근거를 `DECISIONS.md`에 기록한다.
+- G-6: `500~1000 TPS` burst에서 시스템 붕괴를 막기 위한 구조를 반영한다.
+- G-7: 실제 PG 연동 없이도 payment interface와 Mock PG를 통해 승인/조회/취소/웹훅과 유사한 결제 흐름이 구조적으로 이어지도록 한다.
 
 ### 3.2 Non-Goals
-> _What goes here_
-> 명시적으로 다루지 않을 것. 스코프 크리프 방지.
 
-- NG-1: {예: 멀티 리전 active-active — 단일 리전으로 시작}
-- NG-2: {예: 자체 ML 추천 — 외부 API 사용}
+- NG-1: 실제 PG사 API/운영 계약 연동은 구현하지 않는다. 다만 Mock PG는 공식 PG 문서의 승인/조회/취소/웹훅 흐름을 참고한다.
+- NG-2: 회원 인증 및 로그인 보안 처리는 구현하지 않는다.
+- NG-3: 숙소 검색, 추천, 리뷰, 관리자 백오피스는 현재 요구사항에 없다.
+- NG-4: multi-region, CDN, WAF, production waiting room, bot mitigation은 현재 요구사항에 없다.
 
 ---
 
 ## 4. Constraints
 
-> _Why_
-> 설계 자유도를 제한하는 외부 요인. Constraints는 "선택 사항이 아닌 것"이고 Non-Goals는 "선택했지만 안 하는 것" — 혼동 금지.
-
 ### 4.1 Technical Constraints
-- {예: 회사 표준 스택은 Java 21 / Spring Boot 3 / PostgreSQL 16}
-- {예: 레거시 인증 시스템과 SAML 연동 필수}
 
-### 4.2 Organizational / Business Constraints
-- {예: 예산 상한 $X / month}
-- {예: 팀 규모 backend 2명 + frontend 1명}
+- Java 8 이상 또는 Kotlin, Spring Boot 2.7 이상.
+- MySQL 또는 MariaDB 계열 RDBMS.
+- Redis 사용.
+- 애플리케이션 서버 2대 이상의 분산 환경.
+- 인프라 증설(scale-up/out)이 제한적인 상황.
+- 실제 PG 연동은 생략하되, Mock PG는 결제 승인/상태 조회/취소/웹훅 또는 상태 변경 이벤트와 유사한 interface를 제공한다.
+- 추가 기술/라이브러리/인프라는 도입 근거를 `DECISIONS.md`에 기록.
 
-### 4.3 Regulatory / Compliance Constraints
-- {예: GDPR — EU 사용자 데이터는 EU 리전 보관}
-- {예: PCI-DSS — 결제 데이터 직접 저장 금지}
+### 4.2 Design Guardrails
+
+- 요구사항에 없는 값을 임의로 확정하지 않는다.
+- 대상 초특가 숙소 상품 재고는 요구사항상 `10개`로 고정한다.
+- `Idempotency-Key`, request hash, stored response replay는 후보 정책이며, 최종 결정 전에는 요구사항으로 표현하지 않는다.
+- Redis 장애 시 fallback은 필수 설계 주제지만, fail-closed/bounded fallback 등 구체 정책은 미정이다.
+- Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 DEC-000에서 승인된 프로젝트 baseline이다.
 
 ---
 
 ## 5. System Architecture
 
-> _Why_
-> 시스템의 뼈대. 컴포넌트 분해, 통신 방식, 배포 토폴로지를 한눈에 보이게 한다. 다이어그램 없이는 의미 없음.
+### 5.1 Architecture Shape
 
-### 5.1 Architectural Style
-{예: 마이크로서비스 (도메인별 분리, 독립 배포). 동기 통신은 gRPC, 비동기 이벤트는 Kafka.}
-
-선택 근거: {왜 monolith가 아닌가, 왜 event-driven인가}
+현재 repo는 단일 Spring Boot application으로 bootstrap되어 있다. 요구사항은 microservice 분리를 요구하지 않으므로, 우선은 하나의 backend 안에서 Checkout, Booking, Payment, Inventory, Idempotency 관심사를 분리하는 구조가 자연스러운 후보이다. 단, modular monolith 채택 자체도 `DECISIONS.md`에서 확인해야 한다.
 
 ### 5.2 Component Diagram
-```
-{박스/화살표 다이어그램. Mermaid / ASCII / PlantUML 권장 — 이미지보다 diff 가능.}
-```
 
-### 5.3 Deployment Topology
-- **Runtime**: {Kubernetes, ECS, Lambda, ...}
-- **Region**: {us-east-1 single-region with multi-AZ}
-- **Network**: {VPC / subnet / security group 개략}
+```mermaid
+flowchart TB
+    subgraph App["Spring Boot App Replicas"]
+        CheckoutController["Checkout API"]
+        BookingController["Booking API"]
+        CheckoutService["Checkout Read Logic"]
+        BookingService["Booking Application Logic"]
+        IdempotencyPolicy["Idempotency Policy<br/>pending"]
+        InventoryGuard["Inventory Correctness Guard<br/>pending"]
+        RedisFallback["Redis Fallback Policy<br/>pending"]
+        PaymentPolicy["Payment Combination Policy"]
+        PaymentPort["Payment Provider Interface"]
+    end
+
+    Redis[(Redis)]
+    RDB[(MySQL or MariaDB)]
+    MockPG[Mock PG<br/>confirm/query/cancel/event]
+
+    CheckoutController --> CheckoutService
+    CheckoutService --> Redis
+    CheckoutService --> RDB
+
+    BookingController --> BookingService
+    BookingService --> IdempotencyPolicy
+    BookingService --> PaymentPolicy
+    BookingService --> RedisFallback
+    BookingService --> InventoryGuard
+    BookingService --> PaymentPort
+
+    IdempotencyPolicy --> RDB
+    RedisFallback --> Redis
+    InventoryGuard --> RDB
+    PaymentPort --> MockPG
+```
 
 ---
 
 ## 6. Data Design
 
-> _Why_
-> 데이터 모델은 시스템의 척추. 스키마뿐 아니라 **데이터 라이프사이클**(생성 → 보관 → 삭제)까지 포함.
+### 6.1 Conceptual ERD
 
-### 6.1 Data Model / ERD
+```mermaid
+erDiagram
+    USER ||--o{ BOOKING : creates
+    PRODUCT ||--|| INVENTORY : has
+    PRODUCT ||--o{ BOOKING : booked_for
+    BOOKING ||--o{ PAYMENT : paid_by
+    IDEMPOTENCY_RECORD ||--o| BOOKING : may_reference
+
+    USER {
+        bigint id PK
+        bigint y_point_balance
+    }
+
+    PRODUCT {
+        bigint id PK
+        string name
+        bigint price
+        datetime sale_open_at
+        datetime check_in_at
+        datetime check_out_at
+    }
+
+    INVENTORY {
+        bigint product_id PK
+        int total_stock
+        int sold_or_reserved_count
+    }
+
+    BOOKING {
+        bigint id PK
+        bigint user_id FK
+        bigint product_id FK
+        string status
+        bigint amount
+    }
+
+    PAYMENT {
+        bigint id PK
+        bigint booking_id FK
+        string method_type
+        bigint amount
+        string status
+        string external_reference
+    }
+
+    IDEMPOTENCY_RECORD {
+        string id PK
+        string policy_fields
+        string status
+        text response_snapshot
+        datetime expires_at
+    }
 ```
-{ER 다이어그램 또는 표. 핵심 엔티티, 관계, 카디널리티.}
-```
 
-### 6.2 Data Dictionary
-| Entity | Field | Type | Constraint | Description |
-|---|---|---|---|---|
-| User | id | UUID | PK | |
-| User | email | VARCHAR(255) | UNIQUE NOT NULL | |
-| ... | | | | |
+### 6.2 Data Decisions Still Open
 
-### 6.3 Data Lifecycle
-- **Creation**: {언제, 누가, 어떤 트리거로}
-- **Retention**: {보관 기간, 정책}
-- **Archival**: {cold storage 이전 기준}
-- **Deletion**: {hard delete vs soft delete, 주기}
+| Topic | Current State |
+|---|---|
+| Stock quantity | Fixed at `10` for the target limited accommodation product |
+| Inventory model | Count row, per-unit row, reservation table, or another model is open |
+| User/product duplicate booking rule | Not explicitly required; may be needed for fairness but needs user decision |
+| Idempotency storage | Required conceptually, but key/hash/replay/TTL policy is open |
+| Payment state | Failure handling required; timeout/unknown/reconciliation policy is open |
+| Y포인트 balance consistency | Payment method support requires Y포인트, but ledger/balance model is open |
 
-### 6.4 Data Flow
-```
-{DFD 또는 sequence diagram. 주요 시나리오 1–3개.}
+### 6.3 Candidate Booking Flow
+
+이 흐름은 확정 설계가 아니라, 결정해야 할 경계들을 드러내기 위한 후보 흐름이다.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as App
+    participant R as Redis
+    participant D as RDB
+    participant P as Payment Interface
+
+    C->>A: POST /bookings
+    A->>A: validate payment combination
+    A->>A: apply idempotency policy (pending)
+    A->>R: Redis coordination/fallback path (pending)
+    A->>D: inventory correctness guard (pending)
+    A->>P: mock/stub PG flow
+    alt payment success
+        A->>D: create/confirm booking according to chosen state model
+        A-->>C: success
+    else payment failure
+        A->>D: fail/release according to chosen state model
+        A-->>C: failure
+    end
 ```
 
 ---
 
 ## 7. Component Design
 
-> _Why_
-> 각 모듈을 구현자가 그대로 코드로 옮길 수 있는 수준까지 명세. 추상적이면 가치 없음.
+### 7.1 Checkout Read Logic
 
-### 7.1 Component {Name}
-- **Responsibility**: {한 문장}
-- **Inputs**: {API / 이벤트 / 큐 메시지 형식}
-- **Outputs**: {반환값 / 발행 이벤트}
-- **Dependencies**: {다른 컴포넌트, 외부 서비스, DB}
-- **Core Logic**: {핵심 알고리즘 / 상태 머신 / 의사 코드}
+- 주문서 진입에 필요한 상품 정보와 사용자 가용 Y포인트를 조회한다.
+- Redis 사용 여부와 cache fallback 세부 방식은 설계 후보이며, Redis 장애 fallback 요구와 함께 결정한다.
 
-### 7.2 Component {Name 2}
-{...}
+### 7.2 Booking Application Logic
+
+- 결제 수단 조합 검증, 멱등성 처리, 재고 정합성 확인, 결제 interface 호출, 최종 주문/예약 생성 흐름을 조정한다.
+- 외부 PG 연동은 생략하므로 `PaymentPort`와 Mock PG로 승인/조회/취소/웹훅 유사 흐름만 유지한다.
+- DB transaction boundary와 payment call boundary는 미결정 쟁점이다.
+
+### 7.3 Payment Combination Policy
+
+- 허용: 신용카드+Y포인트, Y페이+Y포인트.
+- 금지: 신용카드+Y페이 혼용.
+- 단독 결제 허용 범위, 금액 합계 검증, 음수 금액 검증, 동일 수단 중복 입력 검증은 현재 요구사항에 직접 명시되지 않았으나, 결제 도메인 검증 후보로 DEC-006에서 다룬다.
+
+### 7.4 Redis Failure Policy
+
+- Redis 장애 fallback 전략과 근거는 필수 산출물이다.
+- fail-closed, bounded DB fallback, degraded read-only mode 등 구체 선택은 미정이다.
+
+### 7.5 Idempotency Policy
+
+- 짧은 간격의 연속 결제 요청이 중복 처리되지 않아야 한다.
+- key 전달 방식, 요청 body hash, 저장 결과 replay, conflict response, TTL은 미정이다.
+
+### 7.6 Mock Payment Provider Assumptions
+
+실제 PG사와의 운영 연동은 생략하지만, Mock PG는 단순 boolean stub이 아니라 실제 PG와 유사한 불확실성을 표현해야 한다.
+
+- `confirmPayment(paymentKey/paymentId, orderId, amount)`: 결제 인증 또는 결제 시도를 최종 승인한다. 금액 불일치, 한도 초과, 잔액 부족, 이미 승인됨, timeout/unknown을 시뮬레이션한다.
+- `getPaymentByPaymentKey(...)` 또는 `getPaymentByOrderId(...)`: 승인 후 응답 유실이나 timeout 이후 현재 결제 상태를 조회한다.
+- `cancelPayment(paymentKey/paymentId, reason, cancelAmount?)`: booking 실패 또는 보상 처리 시 전액/부분 취소 흐름을 시뮬레이션한다.
+- `paymentStatusChanged` webhook/event: 결제 상태 변경 또는 비동기 취소 결과를 app이 수신하는 상황을 시뮬레이션한다.
+
+이 가정은 DEC-005의 판단 재료이며, transaction boundary와 recovery worker/scheduler 도입 여부는 아직 확정하지 않는다.
 
 ---
 
 ## 8. Interface Design
 
-> _Why_
-> 컴포넌트의 외부 노출면. 한 번 공개되면 변경 비용이 큼 — SDD 단계에서 신중히.
-
-### 8.1 External APIs
-| Method | Path | Request | Response | Errors |
-|---|---|---|---|---|
-| `POST` | `/api/v1/...` | `{...}` | `200 {...}` | `400, 401, 409` |
-
-### 8.2 Internal Service Interfaces
-{gRPC proto / 내부 REST / 메시지 큐 토픽 + payload}
-
-### 8.3 UI Flow (해당 시)
-{wireframe, sequence, 상태 다이어그램}
+| Method | Path | Purpose | Request/Response Detail |
+|---|---|---|---|
+| `GET` | `/api/v1/checkout/{productId}` | 주문서 진입 정보 조회 | 자유롭게 설계 가능 |
+| `POST` | `/api/v1/bookings` | 결제 및 예약 완료 | 자유롭게 설계 가능. 멱등성 전달 방식은 미정 |
 
 ---
 
 ## 9. Non-Functional Requirements
 
-> _Why_
-> ISO 25010 품질 모델 기반 분류. 인터뷰 스타일과 달리 **각 항목이 검증 가능한 acceptance criteria**를 가져야 한다.
-
-| Category | Requirement | Acceptance Criteria |
+| Category | Requirement | Acceptance Criteria Draft |
 |---|---|---|
-| Performance | 응답 지연 | p99 < 100ms |
-| Scalability | 처리량 | 12K req/s sustained |
-| Availability | 가용성 | 99.99% (월 4분 다운타임) |
-| Reliability | 데이터 내구성 | 11-9 durability |
-| Security | 인증 | OAuth 2.1 + PKCE |
-| Maintainability | 배포 빈도 | weekly canary |
-| Observability | 추적성 | 100% request 분산 추적 |
-| Portability | 환경 | dev / staging / prod 동일 image |
+| Correctness | 초과판매/미달판매 방지 | `10개` 재고 기준으로 confirmed booking/order가 10을 초과하지 않아야 하며, 결제 실패/장애 후 재고가 영구 누락되지 않아야 함 |
+| Fairness | 동등한 확률 | 테스트 가능한 fairness policy가 DEC-001에서 정의되어야 함 |
+| Availability | TPS 급증 대응 | `500~1000 TPS` for `1~5분`에서 시스템 붕괴 방지. 붕괴 기준은 DEC-007에서 정의 |
+| Idempotency | 연속 결제 요청 중복 방지 | 반복 요청이 중복 결제/중복 예약을 만들지 않아야 함 |
+| Redis failure | fallback 전략 | Redis 장애 대응 방식과 근거가 DEC-002에 기록되어야 함 |
+| Payment failure | 결제 실패 처리 | 실패 결제가 최종 주문/예약 성공으로 남지 않아야 함 |
+| Extensibility | 결제 수단 추가 | 새 결제 수단 추가 시 Booking API 핵심 로직 변경이 최소화되어야 함 |
 
 ---
 
-## 10. Cross-Cutting Concerns
+## 10. Architecture Decisions
 
-> _Why_
-> 어느 한 컴포넌트의 책임이 아니라 시스템 전체에 걸쳐 있는 관심사. 한 곳에 모아 두지 않으면 누락되기 쉽다.
+Detailed decisions are tracked in `docs/decisions/DECISIONS.md`.
 
-### 10.1 Security
-- 인증 / 인가 모델 (RBAC / ABAC)
-- 비밀 관리 (KMS, Vault)
-- 입력 검증 / 출력 인코딩
-- 전송 암호화 (TLS), 저장 암호화 (at rest)
-
-### 10.2 Observability
-- Metrics (RED: Rate / Error / Duration, USE: Utilization / Saturation / Errors)
-- Logs (구조화 JSON, correlation ID)
-- Traces (OpenTelemetry, sampling 전략)
-- Alerts (SLO 기반 burn-rate)
-
-### 10.3 Resilience
-- 재시도 / 지수 백오프 / jitter
-- 서킷 브레이커
-- Bulkhead / 격리
-- Graceful degradation 시나리오
-
-### 10.4 Privacy
-- PII 식별 및 분류
-- 데이터 최소화 (collection minimization)
-- 사용자 권리(GDPR right-to-erasure 등) 처리 흐름
-
----
-
-## 11. Architecture Decisions (ADR)
-
-> _Why_
-> Michael Nygard ADR 형식. **"왜 이렇게 했나"가 코드보다 빠르게 잊힌다.** 결정 1건당 1 ADR.
-
-### ADR-001: {결정 제목}
-- **Status**: Proposed / Accepted / Deprecated / Superseded by ADR-XXX
-- **Context**: {어떤 상황과 제약 아래에서 결정해야 했는가}
-- **Decision**: {무엇을 선택했는가}
-- **Consequences**:
-  - Positive: {얻는 것}
-  - Negative: {잃는 것 / 새로 생기는 위험}
-  - Neutral: {중립적 영향}
-
-### ADR-002: {...}
-{...}
-
----
-
-## 12. Alternatives Considered
-
-> _Why_
-> 채택하지 않은 대안과 그 기각 이유. 6개월 뒤 누군가 "왜 X를 안 썼지?"라고 물을 때 답이 되는 섹션.
-
-| Alternative | Pros | Cons | Why Rejected |
-|---|---|---|---|
-| {대안 1: monolith} | {배포 단순} | {팀 독립성 낮음} | {팀 4개로 곧 분리 예정} |
-| {대안 2: DynamoDB} | {수평 확장} | {조인 / 트랜잭션 한계} | {강한 일관성 트랜잭션 필요} |
-
----
-
-## 13. Risk Register (선택)
-
-> _Why_
-> 엔터프라이즈 SDD의 핵심. 각 위험에 등급과 완화 전략을 매핑.
-
-| ID | Risk | Likelihood | Impact | Mitigation | Owner |
-|---|---|---|---|---|---|
-| R-1 | {DB failover 시 30초 다운타임} | Medium | High | {Patroni 자동 failover + read replica fallback} | {SRE} |
-| R-2 | {써드파티 API rate limit 초과} | High | Medium | {로컬 캐시 + exponential backoff} | {Backend} |
-
----
-
-## 14. Requirements Traceability (선택)
-
-> _Why_
-> IEEE 1016 핵심 항목. 요구사항 번호 ↔ 설계 섹션 매핑으로 커버리지를 증명.
-
-| Req ID | Requirement | Design Section | Test Case |
-|---|---|---|---|
-| FR-1 | {기능 설명} | §7.1, §8.1 | TC-001 |
-| NFR-1 | {p99 < 100ms} | §5, §10.2 | LT-005 |
-
----
-
-## 15. Testing Strategy
-
-> _Why_
-> 무엇을 어떤 깊이로 검증할 것인지를 SDD에서 미리 합의. 구현 후 "그게 테스트 가능했나"를 막는다.
-
-- **Unit**: {커버리지 목표, 핵심 모듈 우선순위}
-- **Integration**: {DB / 외부 API mocking 정책, contract test}
-- **E2E**: {핵심 사용자 플로우 N개}
-- **Load / Performance**: {NFR 검증 시나리오 — k6 / Locust 스크립트}
-- **Chaos / Failure Injection**: {network partition, pod kill, DB failover 시나리오}
-- **Acceptance**: {PRD 수용 기준 → 자동화 매핑}
-
----
-
-## 16. Rollout / Deployment Plan
-
-> _Why_
-> 인터뷰 스타일과 가장 큰 차이점. 시스템은 코드가 아니라 운영되는 동안에만 가치 — 배포 / 마이그레이션 / 롤백을 설계의 일부로.
-
-### 16.1 Phased Rollout
-- Phase 1: {dev 환경 검증 — Day 0}
-- Phase 2: {internal canary 1% — Day 7}
-- Phase 3: {staged rollout 10% → 50% → 100% — Day 14–21}
-
-### 16.2 Feature Flags
-| Flag | Default | Removal Criteria |
-|---|---|---|
-| `new_engine_enabled` | off | {2주간 100% 트래픽에서 안정 후 제거} |
-
-### 16.3 Data Migration
-- 마이그레이션 단계: {dual-write → backfill → cutover → cleanup}
-- 롤백 가능 시점: {cutover 이전까지}
-
-### 16.4 Rollback Plan
-- 트리거: {error rate > 5% / 5min, p99 > 2× baseline}
-- 절차: {flag off → traffic shift → 사후 분석}
-
----
-
-## 17. Glossary
-
-> _Why_
-> 도메인 / 약어 통일. 문서 끝이 아니라 처음에 두는 팀도 많음.
-
-| Term | Definition |
+| Decision ID | Topic |
 |---|---|
-| {QPS} | Queries per second |
-| {SLO} | Service Level Objective |
-| {도메인 용어} | {정의} |
+| DEC-000 | Current repo stack/tooling acceptance (Accepted) |
+| DEC-001 | Stock model and fairness policy |
+| DEC-002 | Redis failure fallback policy |
+| DEC-003 | RDB inventory correctness guard |
+| DEC-004 | Idempotency policy |
+| DEC-005 | Payment failure and PG abstraction |
+| DEC-006 | Payment method extensibility |
+| DEC-007 | HA/load shedding/backpressure |
+| DEC-008 | Test/load/observability strategy |
 
 ---
 
-## 18. Appendix (선택)
+## 11. Risk Register
 
-- A. 다이어그램 원본 (PlantUML / Excalidraw 소스)
-- B. 외부 참조 자료 / 벤치마크
-- C. Capacity 추정 상세 계산
-- D. 미해결 질문 (Open Questions)
-
----
-
-## 부록: 작성 체크리스트
-
-- [ ] **Goals**가 측정 가능한 숫자로 적혔는가
-- [ ] **Non-Goals**와 **Constraints**를 분리했는가
-- [ ] Architecture diagram이 텍스트 기반(diff 가능)인가
-- [ ] Data Lifecycle (생성 → 삭제)이 명시되었는가
-- [ ] **Component**가 구현자가 코드로 옮길 수준까지 구체적인가
-- [ ] **NFR** 각 항목에 acceptance criteria가 있는가
-- [ ] Cross-cutting concerns에 **Observability**가 포함되었는가
-- [ ] 주요 결정마다 **ADR**이 1건씩 있는가
-- [ ] **Alternatives Considered**에 기각 이유가 적혔는가
-- [ ] **Rollout Plan**에 롤백 트리거가 있는가
-- [ ] Revision History가 갱신되었는가
+| ID | Risk | Impact | Required Decision |
+|---|---|---|---|
+| R-1 | Fairness is vague and cannot be tested | High | DEC-001 |
+| R-2 | Redis fallback bypasses protection and overloads RDB | High | DEC-002 |
+| R-3 | Inventory guard allows oversell or permanent undersell | Critical | DEC-003 |
+| R-4 | Rapid repeated payment requests create duplicate effects | Critical | DEC-004 |
+| R-5 | Payment failure/timeout leaves inconsistent booking/payment state | High | DEC-005 |
+| R-6 | Load-test and observability tools exist, but domain-specific pass/fail criteria are not defined | Medium | DEC-008 |
 
 ---
 
-## 참고 자료
+## 12. Requirements Traceability
 
-- [Bellevue College — SDD RoadTrip Example (IEEE 1016)](https://www.bellevuecollege.edu/wp-content/uploads/sites/135/2019/04/SDD_RoadTrip.pdf)
-- [Atlassian — Software Design Document Guide](https://www.atlassian.com/work-management/knowledge-sharing/documentation/software-design-document)
-- [CMS — System Design Document Template](https://www.cms.gov/files/document/sddpdf)
-- [Notion — Design Document Template](https://www.notion.com/blog/design-document-template)
-- [Design Docs at Google — Industrial Empathy](https://www.industrialempathy.com/posts/design-docs-at-google/)
-- [Michael Nygard — Documenting Architecture Decisions](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
-- [IEEE 1016-2009](https://standards.ieee.org/ieee/1016/4502/)
-- [ISO/IEC 25010 Quality Model](https://iso25000.com/index.php/en/iso-25000-standards/iso-25010)
+| Req ID | Requirement | Design Section | Decision / Test Hook |
+|---|---|---|---|
+| FR-1 | Checkout API | §7.1, §8 | TFP-009 |
+| FR-2 | Booking API | §7.2, §8 | TFP-001, TFP-006 |
+| FR-3 | Payment methods and combinations | §7.3 | DEC-006, TFP-010 |
+| FR-4 | Idempotency for rapid payment requests | §7.5, §9 | DEC-004, TFP-002 |
+| FR-5 | Redis failure fallback | §7.4, §9 | DEC-002, TFP-004 |
+| FR-6 | Payment failure handling | §7.2, §7.6, §9 | DEC-005, TFP-006, TFP-011 |
+| NFR-1 | Stock=10 correctness and fairness | §6, §9 | DEC-001, DEC-003, TFP-001 |
+| NFR-2 | HA under 50/500~1000 TPS | §9 | DEC-007 |
+| NFR-3 | Runnable source and docs | §13 | DEC-008 |
+
+---
+
+## 13. Local Execution And Verification Handoff
+
+DEC-000에 따라 k6/LGTM은 공식 baseline tooling이다. 아래 entrypoint는 현재 repo의 로컬 검증 루프이며, DEC-008에서는 도구 채택 여부가 아니라 도메인 부하 시나리오와 pass/fail 기준을 정한다.
+
+```bash
+cd backend
+./gradlew compileJava test --no-daemon
+cd ..
+
+docker compose up -d mysql redis lgtm booking-service
+docker compose run --rm -e RATE=20 -e DURATION=10s k6
+```
+
+---
+
+## 14. Open Questions
+
+1. "동등한 확률"을 FIFO, random, first-attempt timestamp, 사용자당 제한 중 무엇으로 검증할 것인가?
+2. Redis 장애 시 write path는 fail-closed인가, 제한 fallback인가, 다른 degraded mode인가?
+3. RDB 재고 정합성은 count row, per-unit row, reservation table 중 무엇으로 보장할 것인가?
+4. 멱등성은 어떤 key, body 비교, replay, TTL 정책을 사용할 것인가?
+5. 결제 실패와 timeout/unknown 결과를 같은 실패로 볼 것인가, 별도 reconciliation 대상으로 볼 것인가?
+6. Mock PG의 webhook/status query를 recovery worker/scheduler로 처리할 것인가, 요청 재시도 경로에서만 처리할 것인가?
+7. k6/LGTM을 사용해 어떤 부하 시나리오, 관측 지표, pass/fail 기준을 둘 것인가?
+
+---
+
+## References
+
+- [Requirements](../requirements.md)
+- [Decision log](../decisions/DECISIONS.md)
+- [Mock-interview design](mock-interview.md)
+- [Test-first scenarios](../testing/test-first-scenarios.md)
+- [Source-backed research note](../research/source-backed-research-note.md)

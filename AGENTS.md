@@ -15,17 +15,20 @@ Build a limited-stock booking/payment backend for a midnight flash-sale scenario
 
 Core requirements:
 
-- Stock is fixed at `10` units for the target product.
+- Stock is fixed at `10` units for the target limited accommodation product.
 - Traffic can burst from normal `50 TPS` to `500~1000 TPS` for `1~5` minutes after `00:00`.
 - The system assumes `2+` stateless application replicas.
+- Infrastructure scale-up/out during the promotion is constrained; correctness and overload control must not rely only on adding capacity.
 - The system must preserve strict booking correctness under duplicate clicks, retries, payment failures, Redis failure, app instance failure, and DB pressure.
 
-## Baseline Stack
+## Accepted Repo Baseline Stack
+
+The current repository bootstrap uses the following user-approved choices. Keep them aligned with `docs/requirements.md` and `docs/decisions/DECISIONS.md`.
 
 - Java 21
 - Spring Boot 3.5.x
-- MySQL 8 as final source of truth
-- Redis for cache/admission control, not final correctness
+- MySQL 8
+- Redis
 - JUnit 5, Spring Boot Test, Testcontainers for verification
 - k6 for load testing
 - LGTM stack for local observability
@@ -34,10 +37,9 @@ Do not introduce production dependencies casually. If adding a dependency, recor
 
 ## Non-Negotiable Invariants
 
-- Confirmed bookings must never exceed stock.
-- One user must not create multiple confirmed bookings for the same limited product.
-- Same `Idempotency-Key` plus same request body must return the same logical result.
-- Same `Idempotency-Key` plus different request body must be rejected.
+- Confirmed bookings must never exceed `10` units for the target product.
+- Rapid repeated payment requests must not create duplicate booking/payment effects.
+- The exact idempotency key/hash/replay policy is a design decision, not a hidden requirement.
 - Payment failure must not create a confirmed booking.
 - Redis failure must not cause oversell.
 - Retry behavior must be bounded and must not amplify a degraded dependency.
@@ -106,10 +108,10 @@ When code exists:
 
 - Prefer a modular monolith first. Do not split bounded contexts into microservices unless a decision record accepts the extra operational cost.
 - Keep application servers stateless.
-- Use MySQL constraints/transactions as final correctness guard.
+- Use the chosen MySQL/MariaDB-family RDB strategy as the final correctness guard once DEC-003 is accepted.
 - Use Redis only for cache/admission/coordination paths whose failure behavior is explicitly documented.
 - Separate Checkout read-cache fallback from Booking write-path admission fallback.
-- Booking write-path Redis failure must be either fail-closed or bounded DB fallback; never unlimited DB fallback.
+- Booking write-path Redis failure policy is a decision topic; do not introduce unlimited direct DB fallback unless an accepted decision explicitly owns the risk.
 - Put `@Transactional` on application service boundaries, not controllers.
 - Do not catch generic exceptions in business code just to return fallback values. Let the global exception layer translate expected failures.
 - Keep domain rules testable without infrastructure when possible.
