@@ -52,10 +52,12 @@ The core design goal is not only to process successful bookings, but to prove co
 ├── AGENTS.md
 ├── README.md
 ├── README-en.md
-├── build.gradle
-├── settings.gradle
-├── common
-├── service-booking
+├── backend
+│   ├── build.gradle
+│   ├── settings.gradle
+│   ├── common
+│   ├── service-booking
+│   └── Dockerfile
 ├── docker-compose.yml
 ├── infra
 │   └── observability
@@ -77,8 +79,8 @@ The core design goal is not only to process successful bookings, but to prove co
 
 The backend now starts as a Spring Boot multi-module project.
 
-- `common`: shared kernel, common response/exception/JPA auditing/CORS/OpenAPI/Actuator configuration
-- `service-booking`: booking service application and initial health-check API
+- `backend/common`: shared kernel, common response/exception/JPA auditing/CORS/OpenAPI/Actuator configuration
+- `backend/service-booking`: booking service application and initial health-check API
 - `infra/observability`: local LGTM observability configuration and Grafana dashboard provisioning
 - `k6`: health-check smoke load test
 - `k8s`: Kubernetes kustomize manifests
@@ -89,7 +91,9 @@ Local execution uses Docker Compose for MySQL, Redis, LGTM, and the application.
 
 ```bash
 # 1. Compile and test
+cd backend
 ./gradlew compileJava test --no-daemon
+cd ..
 
 # 2. Start the local stack
 docker compose up -d mysql redis lgtm booking-service

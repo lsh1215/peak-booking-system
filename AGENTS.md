@@ -27,7 +27,8 @@ Core requirements:
 - MySQL 8 as final source of truth
 - Redis for cache/admission control, not final correctness
 - JUnit 5, Spring Boot Test, Testcontainers for verification
-- Load-test tool is still undecided
+- k6 for load testing
+- LGTM stack for local observability
 
 Do not introduce production dependencies casually. If adding a dependency, record the reason and rejected alternatives in `docs/decisions/DECISIONS.md`.
 
@@ -82,14 +83,17 @@ Multiple Codex sessions may run at the same time.
 
 ## Command Contract
 
-The backend has not been generated yet. Until then, do not invent successful build/test commands.
-
-Planned commands after Spring Boot bootstrap:
+Backend source and Gradle files live under `backend/`. Keep root-level `k6/`, `k8s/`, `infra/observability/`, and `docker-compose.yml` as the local orchestration and verification entrypoints.
 
 ```bash
-docker compose up -d mysql redis
-./gradlew test
-./gradlew bootRun
+cd backend
+./gradlew compileJava test --no-daemon
+cd ..
+
+docker compose up -d mysql redis lgtm booking-service
+docker compose run --rm -e RATE=20 -e DURATION=10s k6
+kubectl kustomize k8s/base
+kubectl kustomize k8s/local
 ```
 
 When code exists:

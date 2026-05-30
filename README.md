@@ -52,10 +52,12 @@
 ├── AGENTS.md
 ├── README.md
 ├── README-en.md
-├── build.gradle
-├── settings.gradle
-├── common
-├── service-booking
+├── backend
+│   ├── build.gradle
+│   ├── settings.gradle
+│   ├── common
+│   ├── service-booking
+│   └── Dockerfile
 ├── docker-compose.yml
 ├── infra
 │   └── observability
@@ -77,8 +79,8 @@
 
 현재 백엔드는 Spring Boot 멀티모듈 구조로 시작합니다.
 
-- `common`: shared kernel, 공통 응답/예외/JPA auditing/CORS/OpenAPI/Actuator 설정
-- `service-booking`: 예약 서비스 애플리케이션과 초기 헬스체크 API
+- `backend/common`: shared kernel, 공통 응답/예외/JPA auditing/CORS/OpenAPI/Actuator 설정
+- `backend/service-booking`: 예약 서비스 애플리케이션과 초기 헬스체크 API
 - `infra/observability`: LGTM 로컬 관측 스택 설정과 Grafana dashboard provisioning
 - `k6`: 헬스체크 smoke 부하 테스트
 - `k8s`: Kubernetes 배포용 kustomize manifests
@@ -89,7 +91,9 @@
 
 ```bash
 # 1. 컴파일/테스트
+cd backend
 ./gradlew compileJava test --no-daemon
+cd ..
 
 # 2. 로컬 전체 스택 실행
 docker compose up -d mysql redis lgtm booking-service

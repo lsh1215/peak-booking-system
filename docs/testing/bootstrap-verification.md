@@ -18,7 +18,7 @@
 
 | Check | Command | Result |
 |---|---|---|
-| Compile and tests | `./gradlew compileJava test --no-daemon` | Passed. `HealthControllerTest > healthReturnsUp()` passed. |
+| Compile and tests | `cd backend && ./gradlew compileJava test --no-daemon` | Passed. `HealthControllerTest > healthReturnsUp()` passed. |
 | Docker image build | `docker compose build booking-service` | Passed. Image `peak-booking/service-booking:local` built. |
 | Local stack startup | `docker compose up -d mysql redis lgtm booking-service` | Passed. MySQL/Redis/LGTM/booking-service all running; MySQL and Redis healthy. |
 | App health API | `curl http://localhost:8080/api/v1/health` | Passed. Returned `success=true`, `service=peak-booking-service`, `status=UP`. |
@@ -32,6 +32,20 @@
 | Metrics after load test | Prometheus query for `/api/v1/health` count | Passed. Count was `202`. |
 | Kubernetes render | `kubectl kustomize k8s/base` and `kubectl kustomize k8s/local` | Passed. Each rendered 10 YAML documents. |
 | Kubernetes YAML parse | Ruby YAML load over rendered manifests | Passed. All rendered documents had `apiVersion` and `kind`. |
+
+## Layout Reverification
+
+After moving the Spring/Gradle/Docker build files under `backend/`, the same checks were re-run on 2026-05-30.
+
+- `cd backend && ./gradlew compileJava test --no-daemon`: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose build booking-service`: passed with build context `./backend`.
+- `docker compose up -d mysql redis lgtm booking-service`: passed.
+- `curl http://localhost:8080/api/v1/health`: passed.
+- Grafana `/api/health`, Prometheus `/-/ready`, Prometheus active target, and Grafana dashboard search: passed.
+- `docker compose run --rm -e RATE=20 -e DURATION=10s k6`: passed with 201 requests, 0% failures, p95 `8.69ms`.
+- Prometheus query for `/api/v1/health` count after k6: passed with count `202`.
+- `kubectl kustomize k8s/base` and `kubectl kustomize k8s/local` plus YAML parsing: passed, 10 rendered documents each.
 
 ## Kubernetes Validation Note
 
