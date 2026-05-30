@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: peak-booking
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - mysql.yaml
+  - redis.yaml
+  - booking-service.yaml
+
+images:
+  - name: peak-booking/service-booking
+    newTag: local
