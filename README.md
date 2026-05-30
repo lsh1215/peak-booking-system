@@ -1,53 +1,56 @@
 # Peak Booking System
 
+[한국어](README.md) | [English](README-en.md)
+
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5.x-6DB33F?style=flat-square&logo=springboot&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL_8-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
 
-Limited-stock booking and payment backend for a midnight flash-sale scenario.
+`00:00`에 오픈되는 한정 재고 숙소 상품을 위한 예약/결제 백엔드 프로젝트입니다.
 
-## Table of Contents
+## 목차
 
-- [Project Overview](#project-overview)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [API Endpoints](#api-endpoints)
-- [Key Documents](#key-documents)
-- [Current Status](#current-status)
+- [프로젝트 개요](#프로젝트-개요)
+- [기술 스택](#기술-스택)
+- [프로젝트 구조](#프로젝트-구조)
+- [시작 방식](#시작-방식)
+- [API 엔드포인트](#api-엔드포인트)
+- [주요 문서](#주요-문서)
+- [현재 상태](#현재-상태)
 
-## Project Overview
+## 프로젝트 개요
 
-This project implements a booking system for accommodation inventory that opens at `00:00` with only `10` available units. The system assumes two or more application server instances and a short burst of high traffic immediately after opening.
+이 프로젝트는 `00:00`에 오픈되는 한정 수량 숙소 상품 예약 시스템을 구현합니다. 대상 상품 재고는 `10개`로 제한되며, 오픈 직후 짧은 시간 동안 높은 트래픽이 몰리는 상황을 가정합니다.
 
-The core design goal is not only to process successful bookings, but to prove correctness under pressure:
+핵심 목표는 단순히 성공 예약을 처리하는 것이 아니라, 압박 상황에서도 정합성을 증명하는 것입니다.
 
-- no overselling beyond the fixed stock count
-- no permanent stock leak after payment failure or system failure
-- fair handling of duplicate clicks and retries
-- predictable degradation during Redis, DB, or payment instability
-- documented trade-offs for Redis admission, DB final consistency, idempotency, fallback, and load testing
+- 고정 재고 수량을 초과하는 초과 판매 방지
+- 결제 실패 또는 시스템 장애 후 재고가 영구히 잠기는 문제 방지
+- 중복 클릭과 재시도에 대한 공정하고 멱등적인 처리
+- Redis, DB, 결제 경로 장애 시 예측 가능한 degraded behavior
+- Redis admission, DB 최종 정합성, 멱등성, fallback, 부하 테스트에 대한 의사결정 기록
 
-## Tech Stack
+## 기술 스택
 
-| Area | Choice |
+| 영역 | 선택 |
 |---|---|
 | Language | Java 21 |
 | Framework | Spring Boot 3.5.x |
-| Runtime | Spring MVC or WebFlux decision pending design validation |
+| Runtime | Spring MVC 또는 WebFlux 중 설계 검증 후 결정 |
 | Database | MySQL 8 |
 | Cache / Admission Control | Redis |
-| ORM | Spring Data JPA / Hibernate, pending implementation design |
-| Testing | JUnit 5, Spring Boot Test, Testcontainers, load-test tool TBD |
+| ORM | Spring Data JPA / Hibernate, 구현 설계 후 확정 |
+| Testing | JUnit 5, Spring Boot Test, Testcontainers, 부하 테스트 도구 TBD |
 | Documentation | Markdown, ADR-style decision records, source-backed research notes |
 
-## Project Structure
+## 프로젝트 구조
 
 ```text
 .
 ├── AGENTS.md
 ├── README.md
+├── README-en.md
 ├── docs
 │   ├── requirements.md
 │   ├── ai
@@ -62,59 +65,59 @@ The core design goal is not only to process successful bookings, but to prove co
     └── skills
 ```
 
-The backend source tree has not been generated yet. Once implementation starts, the expected source layout will be added under the project root and reflected here.
+아직 백엔드 소스 트리는 생성하지 않았습니다. Spring Boot 프로젝트 골격을 만든 뒤 실제 소스 구조를 이 문서에 반영할 예정입니다.
 
-## Getting Started
+## 시작 방식
 
-The repository is currently in requirements and design setup phase. Backend bootstrap commands will be added after the Spring Boot project skeleton is generated.
+현재 저장소는 요구사항 및 설계 세팅 단계입니다. Spring Boot 프로젝트 골격이 생성되면 실제 실행 명령을 추가합니다.
 
-Planned local workflow:
+예상 로컬 실행 흐름:
 
 ```bash
-# 1. Start dependencies
+# 1. 의존 인프라 실행
 docker compose up -d mysql redis
 
-# 2. Run the application
+# 2. 애플리케이션 실행
 ./gradlew bootRun
 
-# 3. Run tests
+# 3. 테스트 실행
 ./gradlew test
 
-# 4. Run load tests
-# TBD after the load-test tool is selected
+# 4. 부하 테스트 실행
+# 부하 테스트 도구 선정 후 추가
 ```
 
-## API Endpoints
+## API 엔드포인트
 
-Initial API scope:
+초기 API 범위:
 
-| Method | Endpoint | Purpose | Status |
+| Method | Endpoint | 목적 | 상태 |
 |---|---|---|---|
-| `GET` | `/api/v1/checkout/{productId}` | Read checkout information such as product, stay dates, price, and user point balance. | Planned |
-| `POST` | `/api/v1/bookings` | Validate payment inputs, enforce idempotency, reserve/confirm stock, and create a final booking. | Planned |
+| `GET` | `/api/v1/checkout/{productId}` | 상품, 숙박 기간, 가격, 사용자 포인트 등 주문서 진입 정보를 조회합니다. | 예정 |
+| `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 선점/확정, 최종 예약 생성을 수행합니다. | 예정 |
 
-Final request/response schemas will be documented after the system design and domain model are accepted.
+최종 요청/응답 스키마는 시스템 설계와 도메인 모델이 확정된 뒤 문서화합니다.
 
-## Key Documents
+## 주요 문서
 
-| Document | Purpose |
+| 문서 | 목적 |
 |---|---|
-| [Requirements](docs/requirements.md) | Public-safe requirements summary. |
-| [Documentation Map](docs/README.md) | Index of project documents. |
-| [Decisions](docs/decisions/DECISIONS.md) | Redis, idempotency, fallback, load testing, and other trade-offs. |
-| [Source-Backed Research](docs/research/source-backed-research-note.md) | Redis/MySQL/PostgreSQL/idempotency/resilience claims with sources. |
-| [Mock Interview Design](docs/system-design/mock-interview.md) | Working system-design discussion document. |
-| [Software Design Document](docs/system-design/sdd.md) | Formal SDD working document. |
-| [Test-First Scenarios](docs/testing/test-first-scenarios.md) | Failure, race, duplicate, and overload scenarios to pin as tests. |
-| [Adversarial Review](docs/reviews/adversarial-review.md) | Critic-mode findings for oversell, undersell, Redis outage, and retry storm risks. |
-| [AI Usage](docs/ai/AI_USAGE.md) | Public disclosure of AI usage and human verification boundary. |
+| [요구사항](docs/requirements.md) | 공개 가능한 요구사항 요약 |
+| [문서 지도](docs/README.md) | 프로젝트 문서 인덱스 |
+| [의사결정 기록](docs/decisions/DECISIONS.md) | Redis, 멱등성, fallback, 부하 테스트 등 주요 trade-off |
+| [출처 기반 리서치](docs/research/source-backed-research-note.md) | Redis/MySQL/PostgreSQL/idempotency/resilience 관련 주장과 출처 |
+| [Mock Interview Design](docs/system-design/mock-interview.md) | 시스템 설계 사고 흐름 문서 |
+| [Software Design Document](docs/system-design/sdd.md) | 정식 SDD 작업 문서 |
+| [Test-First Scenarios](docs/testing/test-first-scenarios.md) | 장애, 경쟁, 중복, 과부하 시나리오를 테스트로 고정하기 위한 문서 |
+| [Adversarial Review](docs/reviews/adversarial-review.md) | oversell, undersell, Redis 장애, retry storm 등에 대한 critic 결과 |
+| [AI Usage](docs/ai/AI_USAGE.md) | AI 사용 범위와 사람 검증 경계 공개 문서 |
 
-## Current Status
+## 현재 상태
 
-- [x] Public-safe requirements extracted
-- [x] README initialized
-- [x] AI usage, prompt log, and conversation log structure created
-- [x] Decision, research, test-first, and adversarial review documents initialized
+- [x] 공개 안전 요구사항 정리
+- [x] README 초기화
+- [x] AI usage, prompt log, conversation log 구조 생성
+- [x] Decision, research, test-first, adversarial review 문서 생성
 - [ ] Spring Boot backend skeleton
 - [ ] Domain model and API schema
 - [ ] Concurrency and idempotency tests
