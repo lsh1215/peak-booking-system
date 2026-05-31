@@ -152,7 +152,7 @@ flowchart LR
 - 단, 모든 요청을 DB로 보내는 unlimited fallback은 금지한다.
 - DB fallback은 candidate pool, gateway/app rate limit, semaphore/bulkhead, 짧은 timeout으로 제한한다.
 - 같은 event epoch에서 Redis 장애가 감지되면 `DB_FALLBACK`으로 전환하고 Redis가 복구되어도 Redis gate로 돌아가지 않는다.
-- 결정 필요: candidate pool 크기, fallback rate limit, semaphore/connection budget.
+- candidate pool, fallback rate limit, semaphore/connection budget은 DEC-007의 초기 runtime budget을 적용하고 k6/LGTM 결과로 조정한다.
 
 ### 3.4.1 Redis Normal Admission Detail
 
@@ -175,7 +175,10 @@ flowchart LR
 - `500~1000 TPS`를 `1~5분` 동안 고려해야 하지만, p95/p99, timeout, pool size, 실패 응답 기준은 지정되지 않았다.
 - k3s + Traefik은 LB/API gateway 역할의 1차 과부하 방어 수단으로 둔다.
 - Traefik rate limit은 `POST /bookings`의 WAS 보호용이며, 중복 방지/사용자별 공정성 원장으로 사용하지 않는다.
-- 결정 필요: 시스템 붕괴를 무엇으로 정의할지, Traefik/app/DB admission limit과 backpressure 기준을 어떤 지표로 검증할지.
+- 초기 runtime budget은 `2`개 WAS, Mock PG normal confirm delay `100ms`, stock `10` 기준으로 산정한다.
+- 초기값은 Traefik average `1000 req/s`, burst `1000`, Hikari pool WAS당 `10`, booking concurrency WAS당 `64`, DB fallback admission bulkhead WAS당 `2`, candidate pool `30`, PG confirm concurrency 전체 `10`이다.
+- 초기 pass/fail은 correctness hard fail, p95 latency, Hikari pending, DB lock wait, technical 5xx/timeout, `PAYMENT_UNKNOWN` drain time을 분리해 본다.
+- 결정 필요: 첫 k6/LGTM 결과를 기준으로 초기 budget을 어떻게 조정할지.
 
 ---
 
@@ -190,8 +193,8 @@ flowchart LR
 | DEC-004 | 멱등성 정책 | 중복 처리 방지는 요구되지만 key/hash/replay/TTL 정책은 미정이다. |
 | DEC-005 | 결제 실패/timeout 처리와 PG abstraction | 실제 PG 연동은 생략되지만 실패 흐름과 interface contract는 필요하다. |
 | DEC-006 | 결제 수단 확장 구조 | Booking API 수정 최소화 구조가 필요하지만 패턴 선택은 미정이다. |
-| DEC-007 | TPS 급증 방어 | Traefik 1차 route-level rate limit과 app/DB bulkhead 방향은 부분 수용되었고, 수치와 pass/fail 기준은 미정이다. |
-| DEC-008 | 테스트/관측/부하 전략 | k6/LGTM은 승인되었고, 부하 시나리오와 pass/fail 기준은 미정이다. |
+| DEC-007 | TPS 급증 방어 | Traefik 1차 route-level rate limit과 app/DB bulkhead 방향, 초기 runtime budget은 부분 수용되었고, 최종값은 k6/LGTM으로 조정한다. |
+| DEC-008 | 테스트/관측/부하 전략 | k6/LGTM은 승인되었고, 초기 시나리오와 pass/fail 기준은 부분 수용되었다. concrete metric name과 dashboard는 구현 후 확정한다. |
 
 ---
 

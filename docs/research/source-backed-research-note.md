@@ -46,6 +46,35 @@
 | Traefik source criteria | Traefik RateLimit은 request host, request header, IP strategy 같은 configured source criterion으로 request를 그룹화한다. IP 기반 grouping은 proxy/NAT/header 처리에 영향을 받을 수 있다. | 검증됨 | [Traefik v3.5 RateLimit sourceCriterion](https://doc.traefik.io/traefik/v3.5/reference/routing-configuration/http/middlewares/ratelimit/) | Gateway rate limiting은 WAS/DB capacity를 보호할 수 있지만, authentication이 범위 밖이거나 user identity가 client-supplied인 경우 user-level fairness에는 application/RDB admission policy가 필요하다. |
 | Little's Law | Little's Law는 stable system의 평균 체류 수, arrival rate, 평균 체류 시간 사이의 관계를 `L = lambda * W`로 설명한다. | 검증됨 | [Little, A Proof for the Queuing Formula: L = λW](https://pubsonline.informs.org/doi/10.1287/opre.9.3.383) | fallback admission concurrency/bulkhead limit의 초기 sizing model로 사용하고, 이후 k6/LGTM으로 검증한다. 측정되지 않은 p99를 stable input처럼 쓰면 안 된다. |
 | HikariCP pool sizing | HikariCP upstream guidance는 connection pool 과대 설정을 경고하고 realistic load에서 throughput/latency를 측정하라고 강조한다. | 검증됨 | [HikariCP About Pool Sizing](https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing) | Fallback DB admission에는 작고 명시적인 connection/bulkhead budget이 필요하다. connection count 증가는 admission control의 대체물이 아니다. |
+| HikariCP connection timeout | HikariCP `connectionTimeout`은 pool에서 connection을 기다리는 최대 시간이며, 최저 허용값은 `250ms`, 기본값은 `30000ms`다. | 검증됨 | [HikariCP README configuration](https://github.com/brettwooldridge/HikariCP#configuration-knobs-baby) | Booking write path에서는 pool 고갈을 30초 동안 끌지 않도록 짧은 timeout을 초기값으로 둔다. |
+| Dependency isolation | AWS는 느린 dependency가 concurrency를 증가시켜 thread, memory, socket, connection 같은 제한 자원을 고갈시킬 수 있으므로 bulkhead/concurrency limit로 blast radius를 제한하라고 설명한다. | 검증됨 | [AWS Builders Library: Dependency isolation](https://aws.amazon.com/builders-library/dependency-isolation/) | DB fallback, PG confirm, recovery worker는 같은 WAS 안에 있어도 별도 concurrency budget을 가져야 한다. |
+| k6 constant arrival rate | k6 `constant-arrival-rate` executor는 응답 시간과 독립적으로 지정한 rate로 iteration을 시작하는 open-model executor다. | 검증됨 | [Grafana k6 constant arrival rate](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/constant-arrival-rate/) | `500~1000 TPS` burst를 closed-loop VU 수가 아니라 도착률 기준으로 재현하는 데 사용한다. |
+| k6 metrics and thresholds | k6 `http_reqs`는 생성된 HTTP 요청 수를 세고 `http_req_duration`은 요청 처리 시간을 측정한다. threshold는 metric/tag별 pass/fail 기준으로 사용할 수 있다. | 검증됨 | [Grafana k6 built-in metrics](https://grafana.com/docs/k6/latest/using-k6/metrics/reference/), [Grafana k6 thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/) | Fast fail도 HTTP 요청 수에는 포함된다. 따라서 controlled rejection과 technical failure를 분리해 custom metric/tag로 측정해야 한다. |
+| SLI/SLO selection | Google SRE는 user-facing serving system에서 availability, latency, throughput을 대표 SLI로 보며, correctness도 system health indicator로 추적해야 한다고 설명한다. | 검증됨 | [Google SRE Book: Service Level Objectives](https://sre.google/sre-book/service-level-objectives/) | DEC-008은 단순 성공률이 아니라 correctness invariant, latency, throughput, recovery 상태를 함께 pass/fail 기준으로 둔다. |
+
+## Research Sweep: DEC-007/DEC-008 Initial Budgets
+
+날짜: 2026-05-31
+
+이번 sweep의 우선순위:
+
+1. 초기 concurrency/connection/timeout 산정에 필요한 queueing, latency, pool sizing 근거.
+2. Traefik/k6의 공식 동작과 metric semantics.
+3. 숫자는 최종 운영값이 아니라 `2`개 WAS, Mock PG `100ms`, stock `10` 기준 starting point로만 기록한다.
+
+주요 참고 자료:
+
+| 출처 | 유형 | 이 프로젝트에서 중요한 이유 |
+|---|---|---|
+| [AWS Builders Library: Dependency isolation](https://aws.amazon.com/builders-library/dependency-isolation/) | 회사 기술 가이드 | Little's Law를 concurrency overload 판단에 연결하고, dependency별 bulkhead가 필요한 이유를 설명한다. |
+| [AWS Builders Library: Timeouts, retries, and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/) | 회사 기술 가이드 | Timeout 선택, retry storm, capped backoff, jitter, side-effecting retry의 idempotency 필요성을 제공한다. |
+| [HikariCP About Pool Sizing](https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing) | upstream 프로젝트 가이드 | DB connection pool은 작게 시작하고 load test로 조정해야 한다는 근거다. |
+| [HikariCP README configuration](https://github.com/brettwooldridge/HikariCP#configuration-knobs-baby) | upstream 프로젝트 문서 | `connectionTimeout`의 의미, 최저 허용값, 기본값을 제공한다. |
+| [Traefik RateLimit middleware](https://doc.traefik.io/traefik/v3.3/middlewares/http/ratelimit/) | 공식 문서 | Token bucket `average`, `period`, `burst` 동작을 확인한다. |
+| [Grafana k6 constant arrival rate](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/constant-arrival-rate/) | 공식 문서 | Open-model arrival rate로 peak traffic을 재현하는 근거다. |
+| [Grafana k6 built-in metrics](https://grafana.com/docs/k6/latest/using-k6/metrics/reference/) | 공식 문서 | `http_reqs`, `http_req_duration`, `http_req_failed` 의미를 확인한다. |
+| [Grafana k6 thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/) | 공식 문서 | Metric/tag 기반 pass/fail threshold 정의 방식을 제공한다. |
+| [Google SRE Book: Service Level Objectives](https://sre.google/sre-book/service-level-objectives/) | SRE reference | user-facing system의 latency/throughput/availability/correctness SLI 선택 근거다. |
 
 ## Research Sweep: Limited-Stock / Flash-Sale Booking References
 
@@ -119,7 +148,7 @@
 
 ## 미해결 리서치 질문
 
-- `500~1000 TPS` burst를 검증할 k6 scenario, LGTM dashboard/query, pass/fail metric을 무엇으로 둘지.
+- DEC-008 초기 k6 scenario와 pass/fail metric은 정리되었지만, 구현 후 concrete LGTM dashboard/query와 metric name을 확정해야 한다.
 - "user/product당 confirmed booking 1건"이 실제 fairness requirement인지, 아니면 candidate policy인지.
 - Redis admission이 payment 전에 capacity를 reserve해야 하는지, 아니면 DB attempt만 gate해야 하는지.
 - 첫 구현에서 fallback policy를 fail-closed로 둘지 bounded DB fallback으로 둘지.
