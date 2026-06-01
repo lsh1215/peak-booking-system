@@ -54,7 +54,7 @@
 | Cache | Redis |
 | Load-test tool | k6. DEC-000에서 user가 승인한 baseline |
 | Observability stack | LGTM stack. DEC-000에서 user가 승인한 baseline |
-| Local ingress / LB candidate | k3s + Traefik. DEC-007에서 1차 과부하 방어 수단으로 부분 수용 |
+| Local ingress / LB candidate | k3s + Traefik. DEC-007에서 1차 과부하 방어 수단으로 수용 |
 
 ### 1.4 범위 제외 / 현재 명시되지 않음
 
@@ -87,14 +87,14 @@
 - **Inventory**: 상품별 한정 재고 수량과 현재 예약/확정 상태.
 - **Booking / Order**: 주문서 입력을 기반으로 생성되는 예약/주문 상태.
 - **Payment**: 결제 수단, 금액, 결제 결과, 외부 결제 참조.
-- **Idempotency Record**: 연속 결제 요청의 중복 처리를 막기 위한 식별/상태 저장소. 구체 key/hash/replay 정책은 DEC-004에서 결정한다.
+- **Idempotency Record**: 서버가 발급한 `booking_attempt_id`, 요청 `request_hash`, replay response를 저장해 연속 결제 요청의 중복 효과를 막는 상태 저장소.
 
 ### 2.3 API Contract (Draft)
 
 | Method | Path | 목적 | 비고 |
 |---|---|---|---|
 | `GET` | `/api/v1/checkout/{productId}` | 상품/가격/입퇴실/Y포인트 등 주문서 정보 조회 | 인증 방식은 범위 밖. 사용자 식별자는 전달된다고 가정 |
-| `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 정합성 확인, 최종 주문/예약 생성 | 멱등성 전달 방식은 미결정 |
+| `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 정합성 확인, 최종 주문/예약 생성 | 서버 발급 `booking_attempt_id` 기반 |
 
 ### 2.4 Architecture Diagram
 
@@ -108,11 +108,11 @@ flowchart LR
     Checkout --> RDB[(MySQL or MariaDB)]
 
     App -->|POST booking| Booking[Booking Write Path]
-    Booking --> Idem[Idempotency Guard<br/>policy pending]
+    Booking --> Idem[Idempotency Guard<br/>booking_attempt_id + request_hash]
     Booking --> PaymentPolicy[Payment Combination Policy]
     Booking --> RedisAdmission[Redis Admission Gate<br/>normal path pending details]
     Booking --> DBAdmission[Bounded DB Admission Gate<br/>Redis failure fallback]
-    Booking --> RDBGuard[RDB Inventory Correctness Guard<br/>pending]
+    Booking --> RDBGuard[RDB Inventory Guard<br/>reservation + atomic counter]
     Booking --> PaymentPort[Payment Provider Interface<br/>external PG mocked]
     PaymentPort --> FakePG[Mock PG<br/>confirm/query/cancel/webhook-like]
 
@@ -127,9 +127,17 @@ flowchart LR
 
 ### 3.1 Inventory Correctness
 
-- 현재 요구사항은 `10개 한정` 재고에서 초과판매와 미달 판매를 모두 막아야 한다고 말하지만, 구체 DB guard 방식은 지정하지 않는다.
-- RDB final guard, Redis admission, queue/waiting strategy 등은 모두 후보일 뿐이다.
-- 결정 필요: 재고를 어떤 상태 모델로 관리할지, RDB에서 어떤 제약/트랜잭션으로 보장할지.
+- 현재 요구사항은 `10개 한정` 재고에서 초과판매와 미달 판매를 모두 막아야 한다.
+- 최종 재고 정합성은 MySQL `reservation` row + atomic counter guard로 보장한다.
+- 핵심 재고 불변식은 `HELD + PAYMENT_UNKNOWN + CONFIRMED <= 10`이다.
+- `PAYMENT_UNKNOWN`은 `30s` inventory deadline까지만 재고를 점유한다. deadline 안에 성공 확정을 못 하면 reservation은 `RELEASED/EXPIRED`로 닫고 다음 후보에게 판매 기회를 넘긴다.
+- `MANUAL_REVIEW_REQUIRED`는 reservation 재고 상태가 아니라 payment_attempt reconciliation 상태이며 재고를 점유하지 않는다.
+- Redis admission은 pre-gate이며 최종 재고 원장이 아니다.
+- DDL은 단일 surrogate primary key와 비식별 관계를 기본으로 하며, unique key는 실제 비즈니스 unique 조건에만 둔다.
+- 초기 DDL은 별도 `booking` table 없이 `reservation.CONFIRMED`를 최종 예약으로 취급한다.
+- 최소 table set은 `sale_inventory`, `admission_sequence`, `booking_admission`, `reservation`, `idempotency_record`, `payment_attempt`, `point_account`, `point_hold`다.
+- 추가 secondary index는 조회 조건과 카디널리티가 명확할 때만 둔다. 애매한 index는 선반영하지 않고 `EXPLAIN`, slow query log, k6/LGTM 결과를 근거로 추가한다.
+- 남은 구현 파라미터: 최소 table set의 column/type/migration, lock wait/deadlock handling.
 
 ### 3.2 Fairness
 
@@ -137,13 +145,18 @@ flowchart LR
 - 정상 상태의 gate는 Redis이며, Redis 장애 fallback 상태의 gate는 MySQL 기반 bounded DB admission gate다.
 - 중복 클릭/재시도가 같은 사용자/상품의 성공 확률을 높이면 안 된다.
 - Traefik rate limit은 WAS/DB 보호 수단이지 선착순 공정성 원장이 아니다.
-- 결정 필요: Redis 정상 상태 admission 자료구조, 사용자/상품 중복 제한의 정확한 DB 제약, gate 전환 epoch.
+- Redis 정상 admission은 ZSET/Hash/String counter + Lua script를 사용한다. 사용자/상품 중복 제한은 `(sale_event_id, product_id, user_id)` unique 축으로 방어하고, `sale_event_id`별 gate mode 전환은 MySQL durable state에 기록한다.
 
 ### 3.3 Idempotency
 
-- 현재 요구사항은 "짧은 간격의 연속 결제 요청이 중복 처리되지 않아야 한다"까지만 확정한다.
-- `Idempotency-Key`, request hash, stored response replay, conflict response는 후보 정책이다.
-- 결정 필요: 멱등성 key 범위, body 비교 여부, 저장 TTL, 처리 중 상태 복구 방식.
+- 현재 요구사항은 "짧은 간격의 연속 결제 요청이 중복 처리되지 않아야 한다"를 요구한다.
+- 멱등성 key는 client가 임의 생성하지 않고, 서버가 주문서 진입 단계에서 발급하는 `booking_attempt_id`로 둔다.
+- 같은 `booking_attempt_id`에서 요청 body의 side-effect 필드가 바뀌면 `request_hash` conflict로 거절한다.
+- terminal 상태의 반복 요청은 저장된 logical response를 replay하고, in-progress 또는 `PAYMENT_UNKNOWN` 반복 요청은 새 PG confirm 없이 현재 상태를 반환하거나 recovery/status 조회로 연결한다.
+- `request_hash`는 `sale_event_id`, `product_id`, 인증된 `user_id`, `booking_attempt_id`, 결제 수단 조합, 수단별 금액, 포인트 사용액, PG 승인 대상 금액, `total_amount`, `currency`, `payment_policy_version`을 정규화해 만든다.
+- 요청 시각, User-Agent, client IP, trace id, retry count, header 순서, 화면 표시용 문자열은 `request_hash`에서 제외한다.
+- terminal response snapshot은 client replay에 필요한 logical response만 저장하고, 카드 번호/PG secret/PII/raw PG payload는 저장하지 않는다.
+- 멱등성 record retention은 `24h`이며, 상태 조회는 별도 endpoint를 MVP 필수로 만들지 않고 같은 `POST /bookings` replay로 제공한다.
 
 ### 3.4 Redis Failure And Fallback
 
@@ -151,8 +164,9 @@ flowchart LR
 - Redis 장애 시 Booking write path를 단순 fail-closed로 닫지 않고 bounded DB admission gate로 제한 fallback한다.
 - 단, 모든 요청을 DB로 보내는 unlimited fallback은 금지한다.
 - DB fallback은 candidate pool, gateway/app rate limit, semaphore/bulkhead, 짧은 timeout으로 제한한다.
-- 같은 event epoch에서 Redis 장애가 감지되면 `DB_FALLBACK`으로 전환하고 Redis가 복구되어도 Redis gate로 돌아가지 않는다.
-- candidate pool, fallback rate limit, semaphore/connection budget은 DEC-007의 초기 runtime budget을 적용하고 k6/LGTM 결과로 조정한다.
+- 같은 `sale_event_id`에서 Redis 장애가 감지되면 `DB_FALLBACK`으로 전환하고 Redis가 복구되어도 Redis gate로 돌아가지 않는다.
+- candidate pool은 sale event당 `30`으로 고정하고 추가 tranche는 열지 않는다. pool 밖 요청은 fast reject한다.
+- fallback rate limit, semaphore/connection budget은 DEC-007의 초기 runtime budget을 적용하고 k6/LGTM 결과로 조정한다.
 
 ### 3.4.1 Redis Normal Admission Detail
 
@@ -166,35 +180,48 @@ flowchart LR
 
 - 실제 PG 연동은 생략하지만, 인터페이스를 통해 흐름은 이어져야 한다.
 - Toss Payments와 PortOne 공식 문서를 기준으로 보면 실제 PG는 결제 승인, 결제 조회, 취소, 웹훅 또는 상태 동기화 흐름을 제공한다.
-- 따라서 Mock PG도 `confirm`, `query/status`, `cancel`, `status changed webhook/event`, timeout/unknown 시뮬레이션을 후보 interface로 둔다.
+- 따라서 Mock PG도 `confirm`, `query/status`, `cancel`, `status changed webhook/event`, timeout/unknown 시뮬레이션을 interface로 둔다.
 - 결제 실패가 최종 주문/예약을 만들면 안 된다는 점은 요구사항상 자연스럽게 도출된다.
-- 결정 필요: 결제 요청과 DB transaction을 분리할지, 실패/timeout/unknown 결과를 어떤 상태로 다룰지.
+- PG confirm은 DB transaction 안에서 호출하지 않는다. durable DB state를 먼저 commit하고 transaction 밖에서 PG interface를 호출한다.
+- PG timeout/unknown은 즉시 실패나 성공으로 확정하지 않고 `PAYMENT_UNKNOWN`으로 둔다. 단, 재고 점유는 `30s` deadline을 넘기지 않는다.
+- Recovery worker/scheduler는 기존 WAS 내부에서 bounded budget으로 실행하고 MySQL lease로 중복 처리를 막는다. Webhook은 빠른 반영 경로지만 유일한 정합성 근거가 아니다. Worker는 `PAYMENT_UNKNOWN`뿐 아니라 stale `HELD`도 회수한다.
+- Recovery lease는 `payment_attempt`의 `lease_owner`, `lease_token`, `lease_until`, `next_reconcile_at`, `reconcile_attempt_count`로 구현한다. lease timeout은 `30s`, batch는 WAS당 `5`, PG status concurrency는 WAS당 `1`이다.
+- due row claim은 짧은 transaction에서 `FOR UPDATE SKIP LOCKED`로 수행하고, PG status/cancel 호출은 transaction 밖에서 한다. 결과 반영은 `lease_token` 일치 조건으로 stale update를 막는다.
+- 11번째 이후 후보는 재고를 점유하지 않는 `WAITING_CANDIDATE`가 될 수 있지만, 사용자-facing 대기 window는 최대 `60s`로 제한한다.
+- `WAITING_CANDIDATE`는 `60s` 안에 선순위 reservation이 release되면 `db_admission_seq` 순서대로 승격하고, 승격되지 않으면 대기 종료 응답을 받는다.
+- `WAITING_EXPIRED` 이후 같은 `sale_event_id + product_id + user_id`는 새 admission chance를 받지 않는다. 재요청은 terminal replay 또는 sold-out 계열 응답으로 처리한다.
+- `WAITING_CANDIDATE`는 고정 candidate pool `30` 안에서만 만들며, 추가 tranche는 열지 않는다.
+- reservation release 이후에도 payment reconciliation은 사용자 대기 종료와 별개로 계속 진행한다.
+- payment reconciliation의 적극 status/cancel window는 최초 unknown 기록 후 `5분`이다. 이 값은 재고 점유 시간이 아니다.
+- `5분` 안에 status/cancel로 payment 상태를 확인하지 못하면 `payment_attempt.MANUAL_REVIEW_REQUIRED`로 전이하고 고빈도 retry 대상에서 제외한다. 이 상태는 재고를 점유하지 않는다.
+- deadline 이후 늦은 PG 성공은 reservation 확정이 아니라 cancel/refund/reconciliation 대상이다. PG 취소 수수료, 환불 비용, CS 비용은 초과판매 방지와 미달판매 방지를 동시에 만족하기 위한 accepted compensation cost로 둔다.
 
 ### 3.6 고가용성 / 과부하 방어
 
 - `500~1000 TPS`를 `1~5분` 동안 고려해야 하지만, p95/p99, timeout, pool size, 실패 응답 기준은 지정되지 않았다.
 - k3s + Traefik은 LB/API gateway 역할의 1차 과부하 방어 수단으로 둔다.
 - Traefik rate limit은 `POST /bookings`의 WAS 보호용이며, 중복 방지/사용자별 공정성 원장으로 사용하지 않는다.
+- Traefik rate limit은 Redis-backed distributed limiter로 두지 않고 instance-local route/global token bucket으로 둔다. Redis 장애와 gateway 보호막을 결합하지 않기 위해서다.
 - 초기 runtime budget은 `2`개 WAS, Mock PG normal confirm delay `100ms`, stock `10` 기준으로 산정한다.
 - 초기값은 Traefik average `1000 req/s`, burst `1000`, Hikari pool WAS당 `10`, booking concurrency WAS당 `64`, DB fallback admission bulkhead WAS당 `2`, candidate pool `30`, PG confirm concurrency 전체 `10`이다.
-- 초기 pass/fail은 correctness hard fail, p95 latency, Hikari pending, DB lock wait, technical 5xx/timeout, `PAYMENT_UNKNOWN` drain time을 분리해 본다.
-- 결정 필요: 첫 k6/LGTM 결과를 기준으로 초기 budget을 어떻게 조정할지.
+- 초기 pass/fail은 correctness hard fail, p95 latency, Hikari pending, DB lock wait, technical 5xx/timeout, stale `HELD`/`PAYMENT_UNKNOWN` inventory deadline, payment reconciliation backlog를 분리해 본다.
+- k6/LGTM 보정은 correctness hard fail을 완화하지 않는 범위에서 resource evidence 기반으로 수행한다. Hikari pending, DB lock wait/deadlock, CPU/heap, stale inventory hold, payment reconciliation backlog를 보고 bulkhead/concurrency/timeout을 작은 폭으로 조정한다.
 
 ---
 
-## 4. 미결정 사항
+## 4. 결정 상태 요약
 
-| ID | 주제 | 미결정 이유 |
+| ID | 주제 | 현재 상태 |
 |---|---|---|
 | DEC-000 | 현재 repo stack/tooling 채택 | Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 user가 승인한 baseline이다. |
-| DEC-001 | 재고 상태 모델/공정성 정의 | authoritative admission gate 순서 기반 공정성은 부분 수용되었고, Redis 자료구조/DB 제약 세부는 미정이다. |
-| DEC-002 | Redis 장애 fallback 정책 | bounded DB admission gate는 수용되었고, fallback budget과 gate 전환 세부는 미정이다. |
-| DEC-003 | RDB 재고 정합성 guard | MySQL/MariaDB 계열은 요구되지만 구체 locking/constraint 방식은 미정이다. |
-| DEC-004 | 멱등성 정책 | 중복 처리 방지는 요구되지만 key/hash/replay/TTL 정책은 미정이다. |
-| DEC-005 | 결제 실패/timeout 처리와 PG abstraction | 실제 PG 연동은 생략되지만 실패 흐름과 interface contract는 필요하다. |
-| DEC-006 | 결제 수단 확장 구조 | Booking API 수정 최소화 구조가 필요하지만 패턴 선택은 미정이다. |
-| DEC-007 | TPS 급증 방어 | Traefik 1차 route-level rate limit과 app/DB bulkhead 방향, 초기 runtime budget은 부분 수용되었고, 최종값은 k6/LGTM으로 조정한다. |
-| DEC-008 | 테스트/관측/부하 전략 | k6/LGTM은 승인되었고, 초기 시나리오와 pass/fail 기준은 부분 수용되었다. concrete metric name과 dashboard는 구현 후 확정한다. |
+| DEC-001 | 재고 상태 모델/공정성 정의 | authoritative admission gate 순서 기반 공정성, Redis ZSET/Hash/String counter + Lua admission 방향을 수용했다. 현재 unique 축은 `(sale_event_id, product_id, user_id)`다. |
+| DEC-002 | Redis 장애 fallback 정책 | bounded DB admission gate와 같은 `sale_event_id` 내 sticky `DB_FALLBACK`을 수용했다. fallback budget은 DEC-007 초기값을 적용하고 k6/LGTM으로 조정한다. |
+| DEC-003 | RDB 재고 정합성 guard | `reservation` row + MySQL atomic counter guard와 `HELD + PAYMENT_UNKNOWN + CONFIRMED <= 10` 불변식을 수용했다. |
+| DEC-004 | 멱등성 정책 | 서버 발급 `booking_attempt_id`, request hash, terminal replay, `24h` retention, `POST /bookings` replay를 수용했다. |
+| DEC-005 | 결제 실패/timeout 처리와 PG abstraction | PG confirm transaction 분리, `PAYMENT_UNKNOWN`의 `30s` inventory deadline, stale `HELD`/unknown recovery worker, release 이후 `5분` payment reconciliation, 늦은 PG 성공 cancel/refund 보상 비용 수용을 결정했다. |
+| DEC-006 | 결제 수단 확장 구조 | `PaymentPlan`, `CombinationPolicy`, `PaymentProcessor`, Y포인트 최소 point balance + point hold record와 `hold -> capture -> release`를 수용했다. |
+| DEC-007 | TPS 급증 방어 | Traefik 1차 route-level rate limit, app/DB bulkhead, 초기 runtime budget, evidence-based tuning policy를 수용했다. |
+| DEC-008 | 테스트/관측/부하 전략 | unit/slice/integration/acceptance test는 TDD로 구현 전에 작성하고, k6 smoke/load/resilience-failure-mix는 구현 완료 후 staging-like 환경에서 실행한다. k6는 정상 부하뿐 아니라 WAS/Redis/PG 일부 장애 중 서비스가 통제된 상태로 동작하는지도 검증한다. concrete metric name과 dashboard는 구현 산출물이다. |
 
 ---
 

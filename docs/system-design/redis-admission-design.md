@@ -136,7 +136,7 @@ Redis admission TTL
 + operational buffer
 ```
 
-초기 후보값은 `6h`다. 단, 최종값은 DEC-004의 idempotency replay window와 DEC-005의 payment reconciliation window가 확정된 뒤 함께 조정한다.
+초기값은 `24h`다. DEC-004의 idempotency record retention과 맞춰 운영 추적과 지연 retry 분석을 쉽게 하고, DEC-005의 `5분` 적극 reconciliation window보다 충분히 길게 둔다. 단, Redis TTL은 정리 편의 값이며 correctness나 audit의 원장은 MySQL이다.
 
 Admission key는 일반 cache key처럼 취급하면 안 된다.
 
