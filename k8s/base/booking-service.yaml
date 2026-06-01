@@ -42,6 +42,20 @@ spec:
         prometheus.io/port: "8080"
     spec:
       terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: wait-for-mysql
+          image: mysql:8.4
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: mysql-secret
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mysqladmin ping -h mysql -uroot -p"$MYSQL_ROOT_PASSWORD" --silent; do
+                sleep 2
+              done
       containers:
         - name: booking-service
           image: peak-booking/backend:local
@@ -54,22 +68,27 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: http
-            initialDelaySeconds: 20
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
-            initialDelaySeconds: 60
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 6
+            timeoutSeconds: 5
+            failureThreshold: 18
           resources:
             requests:
               cpu: 250m
