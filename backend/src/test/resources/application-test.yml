@@ -10,3 +10,12 @@ spring:
     hibernate:
       ddl-auto: none
     open-in-view: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: optional:classpath:test-data.sql
+
+peak-booking:
+  recovery:
+    enabled: false
