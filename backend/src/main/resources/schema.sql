@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS booking_admission (
     user_id BIGINT NOT NULL,
     gate_mode VARCHAR(32) NOT NULL,
     redis_seq BIGINT NULL,
-    db_admission_seq BIGINT NOT NULL,
-    candidate_rank INT NOT NULL,
+    db_admission_seq BIGINT NULL,
+    candidate_rank INT NULL,
     status VARCHAR(40) NOT NULL,
     booking_attempt_id VARCHAR(200) NULL,
     waiting_expires_at DATETIME(6) NULL,
@@ -110,7 +110,9 @@ CREATE TABLE IF NOT EXISTS payment_attempt (
     status VARCHAR(60) NOT NULL,
     method_type VARCHAR(40) NOT NULL,
     amount BIGINT NOT NULL,
+    provider_order_id VARCHAR(200) NOT NULL,
     provider_payment_id VARCHAR(120) NULL,
+    confirm_started_at DATETIME(6) NULL,
     first_unknown_at DATETIME(6) NULL,
     active_reconcile_until DATETIME(6) NULL,
     next_reconcile_at DATETIME(6) NULL,
@@ -124,7 +126,24 @@ CREATE TABLE IF NOT EXISTS payment_attempt (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
-    UNIQUE KEY uk_payment_attempt_booking_attempt (booking_attempt_id)
+    UNIQUE KEY uk_payment_attempt_booking_attempt (booking_attempt_id),
+    UNIQUE KEY uk_payment_attempt_provider_order (provider_order_id)
+);
+
+CREATE TABLE IF NOT EXISTS mock_pg_payment (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    provider_order_id VARCHAR(200) NOT NULL,
+    provider_payment_id VARCHAR(120) NULL,
+    scenario VARCHAR(40) NOT NULL,
+    status VARCHAR(40) NOT NULL,
+    confirm_count INT NOT NULL DEFAULT 0,
+    cancel_count INT NOT NULL DEFAULT 0,
+    last_error_code VARCHAR(120) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_mock_pg_provider_order (provider_order_id),
+    UNIQUE KEY uk_mock_pg_provider_payment (provider_payment_id)
 );
 
 CREATE TABLE IF NOT EXISTS point_account (

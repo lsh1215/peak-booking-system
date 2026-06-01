@@ -17,7 +17,9 @@ public enum BookingErrorCode implements ErrorCodeBase {
     SOLD_OUT(HttpStatus.CONFLICT, "BOOKING_006", "Limited stock is sold out"),
     POINTS_NOT_ENOUGH(HttpStatus.UNPROCESSABLE_ENTITY, "BOOKING_007", "Y points are not enough"),
     ADMISSION_CLOSED(HttpStatus.TOO_MANY_REQUESTS, "BOOKING_008", "Candidate pool is closed"),
-    PAYMENT_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "BOOKING_009", "Payment failed");
+    PAYMENT_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "BOOKING_009", "Payment failed"),
+    SALE_NOT_OPEN(HttpStatus.CONFLICT, "BOOKING_010", "Sale is not open yet"),
+    SERVICE_BUSY(HttpStatus.TOO_MANY_REQUESTS, "BOOKING_011", "Service is temporarily busy");
 
     private final HttpStatus status;
     private final String code;

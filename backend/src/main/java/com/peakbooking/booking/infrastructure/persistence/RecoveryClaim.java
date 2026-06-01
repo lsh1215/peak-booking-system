@@ -1,4 +1,4 @@
-package com.peakbooking.booking.infrastructure.jdbc;
+package com.peakbooking.booking.infrastructure.persistence;
 
 public record RecoveryClaim(
         ReservationRecord reservation,

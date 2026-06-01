@@ -2,6 +2,7 @@ package com.peakbooking.booking.redis;
 
 import java.time.Duration;
 import java.util.List;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -59,6 +60,12 @@ public class RedisAdmissionGateway {
         boolean admitted = "ADMITTED".equals(String.valueOf(response.get(0)));
         long seq = Long.parseLong(String.valueOf(response.get(1)));
         return new Result(admitted, seq);
+    }
+
+    public boolean ping() {
+        return Boolean.TRUE.equals(redisTemplate.execute((RedisCallback<Boolean>) connection ->
+                "PONG".equalsIgnoreCase(connection.ping())
+        ));
     }
 
     public record Result(boolean admitted, long redisSeq) {

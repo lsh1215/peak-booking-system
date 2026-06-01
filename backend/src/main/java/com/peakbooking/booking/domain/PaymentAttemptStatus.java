@@ -2,6 +2,7 @@ package com.peakbooking.booking.domain;
 
 public enum PaymentAttemptStatus {
     REQUESTED,
+    CONFIRMING,
     CONFIRMED,
     FAILED,
     PAYMENT_UNKNOWN,

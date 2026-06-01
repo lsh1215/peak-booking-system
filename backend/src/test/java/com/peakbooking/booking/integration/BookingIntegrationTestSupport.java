@@ -40,14 +40,21 @@ abstract class BookingIntegrationTestSupport {
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("peak-booking.recovery.enabled", () -> "false");
+        registry.add("peak-booking.product-cache-ttl", () -> "0ms");
+        registry.add("peak-booking.gate-mode-cache-ttl", () -> "0ms");
         registry.add("peak-booking.hold-timeout", () -> "100ms");
         registry.add("peak-booking.waiting-timeout", () -> "300ms");
         registry.add("peak-booking.reconciliation-window", () -> "300ms");
+        registry.add("peak-booking.payment.call-timeout", () -> "50ms");
+        registry.add("peak-booking.payment.confirm-recovery-grace", () -> "20ms");
+        registry.add("peak-booking.payment.mock-normal-delay", () -> "1ms");
+        registry.add("peak-booking.payment.mock-timeout-delay", () -> "80ms");
     }
 
     @BeforeEach
     void resetDatabase() {
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
+        jdbcTemplate.update("DELETE FROM mock_pg_payment");
         jdbcTemplate.update("DELETE FROM point_hold");
         jdbcTemplate.update("DELETE FROM payment_attempt");
         jdbcTemplate.update("DELETE FROM idempotency_record");

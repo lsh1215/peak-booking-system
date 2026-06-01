@@ -5,6 +5,10 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -16,7 +20,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
         ErrorCodeBase errorCode = e.getErrorCode();
-        log.warn("Business exception: [{}] {}", errorCode.getCode(), e.getMessage());
+        if (errorCode.getStatus().is5xxServerError()) {
+            log.warn("Business exception: [{}] {}", errorCode.getCode(), e.getMessage());
+        } else {
+            log.debug("Business exception: [{}] {}", errorCode.getCode(), e.getMessage());
+        }
         return ResponseEntity
                 .status(errorCode.getStatus())
                 .body(ApiResponse.error(e.getMessage()));
@@ -32,6 +40,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(message));
+    }
+
+    @ExceptionHandler({
+            CannotCreateTransactionException.class,
+            CannotGetJdbcConnectionException.class,
+            DataAccessResourceFailureException.class,
+            QueryTimeoutException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleDatabaseOverload(Exception e) {
+        log.debug("Database dependency is temporarily unavailable: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("Service is temporarily busy"));
     }
 
     @ExceptionHandler(Exception.class)

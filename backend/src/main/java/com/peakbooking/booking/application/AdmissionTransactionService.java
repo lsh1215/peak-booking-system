@@ -2,7 +2,7 @@ package com.peakbooking.booking.application;
 
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.GateMode;
-import com.peakbooking.booking.infrastructure.jdbc.BookingJdbcRepository;
+import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
@@ -11,10 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AdmissionTransactionService {
 
-    private final BookingJdbcRepository repository;
+    private final BookingJpaRepository repository;
     private final Clock clock;
 
-    public AdmissionTransactionService(BookingJdbcRepository repository, Clock clock) {
+    public AdmissionTransactionService(BookingJpaRepository repository, Clock clock) {
         this.repository = repository;
         this.clock = clock;
     }
@@ -24,6 +24,7 @@ public class AdmissionTransactionService {
             long saleEventId,
             long productId,
             long userId,
+            String bookingAttemptId,
             GateMode gateMode,
             Long redisSeq,
             int candidateLimit
@@ -32,6 +33,7 @@ public class AdmissionTransactionService {
                 saleEventId,
                 productId,
                 userId,
+                bookingAttemptId,
                 gateMode,
                 redisSeq,
                 candidateLimit,
@@ -44,6 +46,7 @@ public class AdmissionTransactionService {
             long saleEventId,
             long productId,
             long userId,
+            String bookingAttemptId,
             int candidateLimit
     ) {
         repository.markDbFallback(saleEventId, productId);
@@ -51,6 +54,7 @@ public class AdmissionTransactionService {
                 saleEventId,
                 productId,
                 userId,
+                bookingAttemptId,
                 GateMode.DB_FALLBACK,
                 null,
                 candidateLimit,

@@ -1,15 +1,17 @@
 package com.peakbooking.booking.application;
 
 import com.peakbooking.booking.config.BookingProperties;
+import com.peakbooking.booking.domain.PaymentAttemptStatus;
 import com.peakbooking.booking.domain.ReservationStatus;
-import com.peakbooking.booking.infrastructure.jdbc.BookingJdbcRepository;
-import com.peakbooking.booking.infrastructure.jdbc.PaymentAttemptRecord;
-import com.peakbooking.booking.infrastructure.jdbc.RecoveryClaim;
-import com.peakbooking.booking.infrastructure.jdbc.ReservationRecord;
-import com.peakbooking.booking.payment.PaymentProvider;
+import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
+import com.peakbooking.booking.infrastructure.persistence.PaymentAttemptRecord;
+import com.peakbooking.booking.infrastructure.persistence.RecoveryClaim;
+import com.peakbooking.booking.infrastructure.persistence.ReservationRecord;
+import com.peakbooking.booking.payment.PaymentCallGuard;
 import com.peakbooking.booking.payment.PaymentStatus;
 import com.peakbooking.booking.payment.PaymentStatusResult;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -20,21 +22,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class RecoveryWorkerService {
 
     private final BookingProperties properties;
-    private final BookingJdbcRepository repository;
-    private final PaymentProvider paymentProvider;
+    private final BookingJpaRepository repository;
+    private final PaymentCallGuard paymentCallGuard;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
     public RecoveryWorkerService(
             BookingProperties properties,
-            BookingJdbcRepository repository,
-            PaymentProvider paymentProvider,
+            BookingJpaRepository repository,
+            PaymentCallGuard paymentCallGuard,
             Clock clock,
             TransactionTemplate transactionTemplate
     ) {
         this.properties = properties;
         this.repository = repository;
-        this.paymentProvider = paymentProvider;
+        this.paymentCallGuard = paymentCallGuard;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
     }
@@ -81,7 +83,63 @@ public class RecoveryWorkerService {
 
     private void recoverClaim(RecoveryClaim claim) {
         ReservationRecord reservation = claim.reservation();
+        if (claim.paymentAttempt().status() == PaymentAttemptStatus.RECONCILING_AFTER_RELEASE
+                || claim.paymentAttempt().status() == PaymentAttemptStatus.LATE_SUCCESS_CANCEL_PENDING) {
+            recoverReleasedPayment(claim);
+            return;
+        }
         if (reservation.status() == ReservationStatus.HELD) {
+            recoverHeld(claim);
+            return;
+        }
+        if (reservation.status() != ReservationStatus.PAYMENT_UNKNOWN) {
+            return;
+        }
+
+        boolean releaseAfterDeadline = reservation.unknownInventoryDeadlineAt() != null
+                && !reservation.unknownInventoryDeadlineAt().isAfter(LocalDateTime.now(clock));
+        if (releaseAfterDeadline) {
+            transactionTemplate.execute(status -> {
+                if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                    releaseUnknownAfterDeadline(reservation);
+                    completeReleasedReplay(reservation, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED");
+                }
+                return null;
+            });
+            PaymentAttemptRecord payment = claim.paymentAttempt();
+            PaymentStatusResult paymentStatus = queryPayment(payment);
+            if (paymentStatus.status() == PaymentStatus.APPROVED) {
+                PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "reservation released after deadline");
+                transactionTemplate.execute(status -> {
+                    if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                        if (cancel.status() == PaymentStatus.CANCELLED) {
+                            repository.markCancelledAfterRelease(reservation.bookingAttemptId());
+                        } else {
+                            repository.markLateSuccessCancelPending(reservation.bookingAttemptId(), LocalDateTime.now(clock));
+                        }
+                    }
+                    return null;
+                });
+            }
+            return;
+        }
+
+        PaymentAttemptRecord payment = claim.paymentAttempt();
+        PaymentStatusResult paymentStatus = queryPayment(payment);
+        transactionTemplate.execute(status -> {
+            if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+            }
+            return null;
+        });
+    }
+
+    private void recoverHeld(RecoveryClaim claim) {
+        ReservationRecord reservation = claim.reservation();
+        PaymentAttemptRecord payment = claim.paymentAttempt();
+        boolean pgMayHaveBeenCalled = payment.status() == PaymentAttemptStatus.CONFIRMING
+                || payment.confirmStartedAt() != null;
+        if (!pgMayHaveBeenCalled) {
             transactionTemplate.execute(status -> {
                 if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     releaseExpiredHeldInTransaction(reservation.id());
@@ -91,34 +149,36 @@ public class RecoveryWorkerService {
             });
             return;
         }
-        if (reservation.status() != ReservationStatus.PAYMENT_UNKNOWN) {
-            return;
-        }
 
-        PaymentAttemptRecord payment = claim.paymentAttempt();
-        PaymentStatusResult paymentStatus = payment.providerPaymentId() == null
-                ? PaymentStatusResult.unknown("NO_PROVIDER_PAYMENT_ID")
-                : paymentProvider.query(payment.providerPaymentId());
-
-        boolean releaseAfterDeadline = reservation.unknownInventoryDeadlineAt() != null
-                && !reservation.unknownInventoryDeadlineAt().isAfter(LocalDateTime.now(clock));
-        if (releaseAfterDeadline) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        boolean afterDeadline = reservation.holdExpiresAt() == null || !reservation.holdExpiresAt().isAfter(now);
+        if (afterDeadline) {
             transactionTemplate.execute(status -> {
                 if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
-                    releaseUnknownAfterDeadline(reservation, payment, paymentStatus);
-                    completeReleasedReplay(reservation, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED");
+                    ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
+                    if (locked.status() == ReservationStatus.HELD) {
+                        repository.releaseReservation(locked, "HELD_CONFIRM_DEADLINE_EXPIRED", LocalDateTime.now(clock));
+                        repository.releasePoints(locked.bookingAttemptId());
+                        repository.markReconcilingAfterRelease(
+                                locked.bookingAttemptId(),
+                                LocalDateTime.now(clock),
+                                LocalDateTime.now(clock).plus(properties.reconciliationWindow())
+                        );
+                        completeReleasedReplay(locked, "HELD_CONFIRM_DEADLINE_EXPIRED");
+                    }
                 }
                 return null;
             });
-            if (paymentStatus.status() == PaymentStatus.APPROVED && payment.providerPaymentId() != null) {
-                PaymentStatusResult cancel = paymentProvider.cancel(
-                        payment.providerPaymentId(),
-                        "reservation released after deadline"
-                );
+            PaymentStatusResult paymentStatus = queryPayment(payment);
+            if (paymentStatus.status() == PaymentStatus.APPROVED) {
+                PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "held reservation released after deadline");
                 transactionTemplate.execute(status -> {
-                    if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())
-                            && cancel.status() == PaymentStatus.CANCELLED) {
-                        repository.markCancelledAfterRelease(reservation.bookingAttemptId());
+                    if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                        if (cancel.status() == PaymentStatus.CANCELLED) {
+                            repository.markCancelledAfterRelease(reservation.bookingAttemptId());
+                        } else {
+                            repository.markLateSuccessCancelPending(reservation.bookingAttemptId(), LocalDateTime.now(clock));
+                        }
                     }
                     return null;
                 });
@@ -126,9 +186,30 @@ public class RecoveryWorkerService {
             return;
         }
 
+        PaymentStatusResult paymentStatus = queryPayment(payment);
         transactionTemplate.execute(status -> {
-            if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+            if (!repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                return null;
+            }
+            if (paymentStatus.status() == PaymentStatus.APPROVED) {
                 applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+            } else if (paymentStatus.status() == PaymentStatus.FAILED
+                    || paymentStatus.status() == PaymentStatus.CANCELLED) {
+                applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+            } else {
+                ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
+                repository.markPaymentUnknown(
+                        locked,
+                        locked.holdExpiresAt(),
+                        LocalDateTime.now(clock),
+                        LocalDateTime.now(clock).plus(properties.reconciliationWindow()),
+                        paymentStatus.providerPaymentId()
+                );
+                repository.scheduleNextReconcile(
+                        locked.bookingAttemptId(),
+                        nextReconcileAt(LocalDateTime.now(clock), locked.holdExpiresAt()),
+                        LocalDateTime.now(clock)
+                );
             }
             return null;
         });
@@ -143,7 +224,10 @@ public class RecoveryWorkerService {
         if (status.status() == PaymentStatus.APPROVED) {
             if (repository.confirmReservation(reservation, now)) {
                 repository.capturePoints(reservation.bookingAttemptId());
-                repository.markPaymentConfirmed(reservation.bookingAttemptId(), payment.providerPaymentId());
+                repository.markPaymentConfirmed(
+                        reservation.bookingAttemptId(),
+                        status.providerPaymentId() == null ? payment.providerPaymentId() : status.providerPaymentId()
+                );
                 BookingResult result = new BookingResult(
                         201,
                         "BOOKING_CONFIRMED",
@@ -162,25 +246,83 @@ public class RecoveryWorkerService {
             repository.releasePoints(reservation.bookingAttemptId());
             repository.markPaymentFailed(reservation.bookingAttemptId(), status.status().name());
             completeReleasedReplay(reservation, status.status().name());
+        } else {
+            repository.scheduleNextReconcile(
+                    reservation.bookingAttemptId(),
+                    nextReconcileAt(now, reservation.unknownInventoryDeadlineAt()),
+                    now
+            );
         }
     }
 
-    public void releaseUnknownAfterDeadline(
-            ReservationRecord reservation,
-            PaymentAttemptRecord payment,
-            PaymentStatusResult status
-    ) {
+    public void releaseUnknownAfterDeadline(ReservationRecord reservation) {
         ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
         if (locked.status() != ReservationStatus.PAYMENT_UNKNOWN) {
             return;
         }
         repository.releaseReservation(locked, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED", LocalDateTime.now(clock));
         repository.releasePoints(locked.bookingAttemptId());
-        repository.markReconcilingAfterRelease(locked.bookingAttemptId());
+        repository.markReconcilingAfterRelease(
+                locked.bookingAttemptId(),
+                LocalDateTime.now(clock),
+                LocalDateTime.now(clock).plus(properties.reconciliationWindow())
+        );
+    }
 
-        if (status.status() == PaymentStatus.APPROVED && payment.providerPaymentId() != null) {
-            repository.markLateSuccessCancelPending(locked.bookingAttemptId());
+    private void recoverReleasedPayment(RecoveryClaim claim) {
+        PaymentAttemptRecord payment = claim.paymentAttempt();
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (payment.activeReconcileUntil() != null && !payment.activeReconcileUntil().isAfter(now)) {
+            return;
         }
+
+        PaymentStatusResult paymentStatus = queryPayment(payment);
+        if (paymentStatus.status() == PaymentStatus.APPROVED) {
+            PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "released reservation payment reconciliation");
+            transactionTemplate.execute(status -> {
+                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                    if (cancel.status() == PaymentStatus.CANCELLED) {
+                        repository.markCancelledAfterRelease(payment.bookingAttemptId());
+                    } else {
+                        repository.markLateSuccessCancelPending(
+                                payment.bookingAttemptId(),
+                                nextReconcileAt(now, payment.activeReconcileUntil())
+                        );
+                    }
+                }
+                return null;
+            });
+            return;
+        }
+        if (paymentStatus.status() == PaymentStatus.CANCELLED) {
+            transactionTemplate.execute(status -> {
+                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                    repository.markCancelledAfterRelease(payment.bookingAttemptId());
+                }
+                return null;
+            });
+            return;
+        }
+        if (paymentStatus.status() == PaymentStatus.FAILED) {
+            transactionTemplate.execute(status -> {
+                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                    repository.markPaymentFailed(payment.bookingAttemptId(), "RELEASED_PAYMENT_FAILED");
+                }
+                return null;
+            });
+            return;
+        }
+
+        transactionTemplate.execute(status -> {
+            if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                repository.scheduleNextReconcile(
+                        payment.bookingAttemptId(),
+                        nextReconcileAt(now, payment.activeReconcileUntil()),
+                        now
+                );
+            }
+            return null;
+        });
     }
 
     private void completeReleasedReplay(ReservationRecord reservation, String reason) {
@@ -196,5 +338,49 @@ public class RecoveryWorkerService {
                 reason
         );
         repository.completeIdempotencyIfExists(reservation.bookingAttemptId(), result);
+    }
+
+    private PaymentStatusResult queryPayment(PaymentAttemptRecord payment) {
+        if (payment.providerPaymentId() != null) {
+            return paymentCallGuard.query(payment.providerPaymentId());
+        }
+        if (payment.providerOrderId() != null) {
+            return paymentCallGuard.queryByOrderId(payment.providerOrderId());
+        }
+        return PaymentStatusResult.unknown("NO_PROVIDER_LOOKUP_KEY");
+    }
+
+    private PaymentStatusResult cancelPayment(
+            PaymentAttemptRecord payment,
+            PaymentStatusResult status,
+            String reason
+    ) {
+        String providerPaymentId = status.providerPaymentId() == null
+                ? payment.providerPaymentId()
+                : status.providerPaymentId();
+        if (providerPaymentId != null) {
+            return paymentCallGuard.cancel(providerPaymentId, reason);
+        }
+        if (payment.providerOrderId() != null) {
+            return paymentCallGuard.cancelByOrderId(payment.providerOrderId(), reason);
+        }
+        return PaymentStatusResult.unknown("NO_PROVIDER_LOOKUP_KEY");
+    }
+
+    private LocalDateTime nextReconcileAt(LocalDateTime now, LocalDateTime deadline) {
+        LocalDateTime next = now.plus(shortBackoff());
+        if (deadline != null && next.isAfter(deadline)) {
+            return deadline;
+        }
+        return next;
+    }
+
+    private Duration shortBackoff() {
+        Duration fixedDelay = properties.recovery().fixedDelay();
+        Duration deadlineFriendly = properties.holdTimeout().dividedBy(2);
+        if (deadlineFriendly.isZero() || deadlineFriendly.isNegative()) {
+            return fixedDelay;
+        }
+        return fixedDelay.compareTo(deadlineFriendly) <= 0 ? fixedDelay : deadlineFriendly;
     }
 }

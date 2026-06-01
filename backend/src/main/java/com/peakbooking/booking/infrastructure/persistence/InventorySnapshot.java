@@ -1,4 +1,4 @@
-package com.peakbooking.booking.infrastructure.jdbc;
+package com.peakbooking.booking.infrastructure.persistence;
 
 public record InventorySnapshot(int totalCount, int reservedCount, int paymentUnknownCount, int confirmedCount) {
 

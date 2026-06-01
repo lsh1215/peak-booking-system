@@ -14,8 +14,27 @@ public record BookingProperties(
         Duration waitingTimeout,
         Duration idempotencyRetention,
         Duration reconciliationWindow,
+        Bulkhead bulkhead,
+        Payment payment,
         Recovery recovery
 ) {
+
+    public record Bulkhead(
+            int bookingWriteConcurrency,
+            int dbFallbackConcurrency,
+            int pgConfirmConcurrency,
+            int recoveryPgConcurrency,
+            int checkoutReadConcurrency
+    ) {
+    }
+
+    public record Payment(
+            Duration callTimeout,
+            Duration confirmRecoveryGrace,
+            Duration mockNormalDelay,
+            Duration mockTimeoutDelay
+    ) {
+    }
 
     public record Recovery(
             Duration fixedDelay,

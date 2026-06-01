@@ -1,4 +1,4 @@
-package com.peakbooking.booking.infrastructure.jdbc;
+package com.peakbooking.booking.infrastructure.persistence;
 
 import com.peakbooking.booking.domain.ReservationStatus;
 import java.time.LocalDateTime;

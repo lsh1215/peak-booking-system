@@ -29,6 +29,10 @@ public class AttemptTokenService {
 
     public AttemptToken issue(long userId, long saleEventId, long productId) {
         String attemptId = "ba_" + UUID.randomUUID();
+        return issueForAttemptId(attemptId, userId, saleEventId, productId);
+    }
+
+    public AttemptToken issueForAttemptId(String attemptId, long userId, long saleEventId, long productId) {
         String payload = String.join(":",
                 attemptId,
                 Long.toString(userId),

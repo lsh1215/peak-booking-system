@@ -1,4 +1,4 @@
-package com.peakbooking.booking.infrastructure.jdbc;
+package com.peakbooking.booking.infrastructure.persistence;
 
 import com.peakbooking.booking.domain.AdmissionStatus;
 import java.time.LocalDateTime;
@@ -8,8 +8,9 @@ public record AdmissionRecord(
         long saleEventId,
         long productId,
         long userId,
-        long dbAdmissionSeq,
+        Long dbAdmissionSeq,
         AdmissionStatus status,
+        String bookingAttemptId,
         LocalDateTime waitingExpiresAt
 ) {
 }
