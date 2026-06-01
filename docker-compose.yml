@@ -60,6 +60,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/peak_booking?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: peak
       SPRING_DATASOURCE_PASSWORD: peak
+      SPRING_SQL_INIT_MODE: always
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
       OTEL_SERVICE_NAME: peak-booking-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
