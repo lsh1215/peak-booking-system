@@ -19,6 +19,7 @@ target/
 
 # Test / coverage output
 test-results/
+loadtest-results/
 coverage/
 reports/
 
@@ -36,4 +37,3 @@ docs/ai/.ai-log.lock
 docker-data/
 data/
 tmp/
-

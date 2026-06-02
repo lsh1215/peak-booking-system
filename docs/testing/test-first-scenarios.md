@@ -19,6 +19,13 @@
 
 따라서 k6 검증은 최소 두 축을 모두 포함해야 한다. 첫째, 모든 주요 구성요소가 정상인 상태에서 `50 TPS` baseline과 `500~1000 TPS` peak를 버티는지 본다. 둘째, 같은 부하 조건에서 WAS replica 1대 종료, Redis 사용 불가, Mock PG timeout/unknown, 중복 클릭 폭주가 발생해도 초과판매, 중복 결제, DB collapse, 무제한 fallback이 발생하지 않는지 본다.
 
+부하 테스트 pass/fail 기준은 별도 문서로 관리한다.
+
+- 초기 예상 기준: [loadtest-success-criteria-initial.md](./loadtest-success-criteria-initial.md)
+- 실측 보정 기준: [loadtest-success-criteria-calibrated.md](./loadtest-success-criteria-calibrated.md)
+
+초기 기준은 첫 검증을 시작하기 위한 추정값이고, 실측 보정 기준은 실제 k3s/GCP 측정 결과를 반영한 실행 기준이다. 초과판매 금지, 재고 불변식, 중복 결제 방지 같은 hard correctness 기준은 어느 쪽에서도 완화하지 않는다.
+
 현재 요구에 맞지 않는 테스트:
 
 - 장시간 soak/endurance test는 `1~5분` 피크 요구에 비해 우선순위가 낮다.
@@ -45,6 +52,9 @@
 | TFP-005 | `HELD` reservation 이후 payment business failure | `HELD -> RELEASED`로 전이하고 `reserved_count`가 감소해야 하며 성공 final booking/order가 남지 않아야 한다. | Integration | 수용: DEC-003/005 |
 | TFP-006 | 한도 초과 같은 payment approval 실패 | 실패 응답을 반환하고 성공 final booking/order를 만들지 않아야 한다. | Integration | 후보 |
 | TFP-007 | Traefik을 통과한 `500~1000 TPS`, `1~5분` peak traffic | DEC-007 metrics 기준으로 Traefik/app/DB backpressure가 WAS/DB collapse를 막아야 한다. 정상 부하와 장애 주입 부하를 분리해 모두 실행해야 한다. | Load/Resilience with k6 | 수용: DEC-008 |
+| TFP-007a | spike 중 낮은 WAS-local permit이 Redis admission보다 먼저 동작 | 낮은 pre-Redis app semaphore가 공정성 기준을 바꾸면 안 된다. DB write bulkhead는 Redis admission 후보가 MySQL write로 진입할 때만 좁게 적용되어야 한다. | Unit/Integration/Load | 수용: DEC-007 |
+| TFP-007b | candidate pool 밖 peak 요청이 DB product/gate-mode read를 매번 수행 | 정상 Redis 경로에서는 candidate pool 밖 요청이 MySQL read/write를 유발하지 않아야 한다. gate-mode 확인은 짧은 TTL cache로 제한하고, accepted candidate만 bounded DB access로 들어가야 한다. | Unit/Integration/Load | 수용: DEC-007 |
+| TFP-007c | controlled rejection이 요청별 WARN 로그를 남김 | 의도된 `429`/busy/sold-out은 metric으로 관측하고 요청별 WARN 로그로 CPU/I/O를 잠식하지 않아야 한다. | Unit/Load | 수용: DEC-008 |
 | TFP-008 | booking/payment flow 중 app instance crash | PG 호출 전/중 남은 stale `HELD`와 `PAYMENT_UNKNOWN`을 WAS 내부 recovery worker가 MySQL lease로 claim해 중복 없이 recovery 해야 한다. `30s` 안에 확정하지 못한 재고 점유는 release되어야 하며, stale worker의 늦은 결과 update는 `lease_token`과 deadline 조건으로 막아야 한다. | Fault injection | 수용: DEC-005 |
 | TFP-009 | booking 전 checkout 정보 조회 | 상품 정보, 사용 가능한 Y포인트, 서버 발급 `booking_attempt_id`를 반환해야 한다. | Integration | 수용: DEC-004 |
 | TFP-010 | 허용되지 않는 결제 조합: credit card + Y페이 | `CombinationPolicy`가 booking/payment request를 거절해야 한다. | Unit/Integration | 수용: DEC-006 |
@@ -53,7 +63,7 @@
 | TFP-013 | 같은 `sale_event_id` 중 Redis 실패 후 복구 | 같은 `sale_event_id`는 `DB_FALLBACK`에 머물러야 하며 Redis와 DB admission order를 병합하면 안 된다. | Integration/Fault injection | 수용: DEC-002 |
 | TFP-014 | bounded DB admission sequence 동시 발급 | `db_admission_seq`가 product/sale event별로 유일해야 하고, lock wait가 DEC-008 threshold 안에 머물며 Hikari pending이 무제한 증가하면 안 된다. | Integration/Load | 후보 |
 | TFP-015 | Y포인트 포함 복합 결제에서 외부 PG 실패 또는 unknown | Y포인트는 `hold` 상태에서 최종 차감되지 않아야 하며, PG success가 reservation deadline 안에 확인되면 `capture`, 명확한 failure 또는 deadline release면 `release`되어야 한다. 늦은 외부 PG success는 booking 확정이 아니라 cancel/refund/reconciliation 대상이다. | Integration | 수용: DEC-006 |
-| TFP-016 | 1~10번 중 일부가 `PAYMENT_UNKNOWN`이고 11~30번 후보가 대기 | 11번째 이후 `WAITING_CANDIDATE`는 재고를 점유하지 않고 최대 `60s`만 사용자-facing 대기 상태로 남아야 한다. 선순위 `PAYMENT_UNKNOWN`이 `30s` deadline으로 release되면 `db_admission_seq` 순서대로 승격하고, 60초 안에 승격되지 않으면 대기 종료 응답을 받아야 한다. 30번 밖 요청은 추가 tranche 없이 fast reject되어야 한다. | Integration/Fault injection | 수용: DEC-005/007 |
+| TFP-016 | 1~10번 중 일부가 `PAYMENT_UNKNOWN`이고 11~30번 후보가 대기 | 11번째 이후 `WAITING_CANDIDATE`는 재고를 점유하지 않고 최대 `60s`만 사용자-facing 대기 상태로 남아야 한다. 선순위 `PAYMENT_UNKNOWN`이 `30s` deadline으로 release되면 `db_admission_seq` 순서대로 승격하고, 60초 안에 승격되지 않으면 대기 종료 응답을 받아야 한다. 단, FIFO 선두에서 `PAYMENT_UNKNOWN`이 연속 발생하면 뒤 순번을 앞지르지 않는 현재 공정성 정책상 underfill이 발생할 수 있다. 이 경우 oversell/중복 결제/무제한 retry가 없는지를 adversarial mixed로 검증하고, 10개 판매 달성 여부는 realistic mixed와 분리 판정한다. 30번 밖 요청은 추가 tranche 없이 fast reject되어야 한다. | Integration/Fault injection | 수용: DEC-005/007 |
 | TFP-017 | `PAYMENT_UNKNOWN` 상태에서 같은 `booking_attempt_id`로 `POST /bookings` 반복 | 새 PG confirm을 호출하지 않고 현재 logical state를 반환해야 한다. 동일 request hash는 recovery/status path로 연결하고, 다른 request hash는 conflict로 거절해야 한다. | Integration | 수용: DEC-004/005 |
 | TFP-018 | `WAITING_EXPIRED` 이후 같은 사용자가 같은 sale event에 재요청 | `(sale_event_id, product_id, user_id)` unique admission 축 때문에 새 admission chance를 주면 안 된다. 기존 terminal 상태 replay 또는 sold-out 계열 응답으로 처리해야 하며, 새 기회는 별도 `sale_event_id`나 명시적 추가 판매 정책이 있을 때만 가능하다. | Integration | 수용: DEC-001/005 |
 | TFP-019 | recovery backoff가 inventory deadline보다 길어지는 경우 | `next_reconcile_at`은 `hold_expires_at` 또는 `unknown_inventory_deadline_at`을 넘지 않도록 cap되어야 한다. backoff 때문에 stale `HELD`/`PAYMENT_UNKNOWN` release가 `30s`를 넘으면 실패다. | Unit/Integration | 수용: DEC-005 |
@@ -61,7 +71,7 @@
 
 ## DEC-008 초기 k6 시나리오
 
-`constant-arrival-rate` executor로 arrival rate를 고정한다. Fast fail은 `http_reqs`에는 포함되지만, 의도된 `429`, sold out, candidate rejected, duplicate replay는 technical failure에서 제외한다.
+`constant-arrival-rate` executor로 arrival rate를 고정한다. Fast fail은 `http_reqs`에는 포함되지만, 의도된 `429`, sold out, candidate rejected, duplicate replay는 technical failure에서 제외한다. technical failure는 absolute count 0이 아니라 rate `< 1%`로 판정한다.
 
 | 시나리오 | 부하 | Pass 기준 |
 |---|---:|---|
@@ -72,22 +82,22 @@
 | redis-down | `500~1000 RPS` 중 Redis 차단 | candidate pool `30`과 DB fallback bulkhead가 적용되고 oversell 없음 |
 | was-one-down | peak 중 WAS replica 1개 종료 | LB가 생존 replica로 라우팅하고 duplicate/oversell 없음 |
 | pg-timeout | 일부 confirm timeout | `PAYMENT_UNKNOWN` 응답 p95 `<= 700ms`, 새 PG confirm 중복 없음, `30s` 안에 확정되지 않은 reservation은 release, 이후 payment는 `5분` reconciliation |
+| payment-failure | 명확한 PG business failure | confirmed booking을 만들지 않고 reservation/point hold를 release하며, 다음 후보에게 판매 기회가 넘어감 |
+| late-success | reservation deadline 이후 늦은 PG success | 이미 release된 reservation을 되살리지 않고 cancel/refund/reconciliation 대상으로 전이 |
 | waiting-candidate | 선순위 일부 `PAYMENT_UNKNOWN`, 후순위 후보 대기 | `WAITING_CANDIDATE` 사용자-facing 대기 `<= 60s`, 선순위 release 후 승격은 `db_admission_seq` 순서 |
-| mixed | Redis down + WAS 1대 down + PG timeout + duplicate | hard correctness fail 없음, resource threshold 유지 |
+| realistic-mixed | duplicate + 명확한 payment failure + 낮은 비율의 PG timeout | DB 기준 `confirmed_count = 10`, hard correctness fail 없음, resource threshold 유지 |
+| adversarial-mixed | Redis down + WAS 1대 down + 높은 PG timeout + duplicate | hard correctness fail 없음, 무제한 retry/DB collapse 없음. 연속 unknown으로 인한 underfill은 60초 대기 정책의 accepted trade-off인지 별도 판단 |
 
 ## DEC-008 초기 Threshold
 
-| 경로 | Pass | Warning |
-|---|---:|---:|
-| `GET /checkout` | p95 `<= 200ms` | p95 `> 100ms` |
-| `POST /bookings` normal confirmed | p95 `<= 500ms` | p95 `> 300ms` |
-| DB/PG 없는 controlled rejection | p95 `<= 200ms` | p95 `> 100ms` |
-| Redis down DB fallback rejection | p95 `<= 500ms` | p95 `> 300ms` |
-| PG timeout -> `PAYMENT_UNKNOWN` | p95 `<= 700ms` | p95 `> 600ms` |
-| stale `HELD` / `PAYMENT_UNKNOWN` inventory release | `<= 30s` | `> 25s` |
-| payment reconciliation to manual review | `<= 5m` | `> 4m` |
+초기 threshold 원본은 [loadtest-success-criteria-initial.md](./loadtest-success-criteria-initial.md)에 보존한다. 실측 후 보정한 실행 기준은 [loadtest-success-criteria-calibrated.md](./loadtest-success-criteria-calibrated.md)를 따른다.
 
-p99는 초기 pass/fail이 아니라 warning/관측 지표로 수집한다.
+테스트 코드와 k6 script는 다음 원칙을 지켜야 한다.
+
+- DB connection acquisition timeout, DB unavailable, query timeout은 uncontrolled 500이 아니라 controlled overload 응답으로 처리되어야 한다.
+- `GET /checkout`은 booking write path와 별도 read bulkhead를 사용해 주문서 조회 폭주가 booking write/recovery DB budget을 잠식하지 않아야 한다.
+- p99는 pass/fail이 아니라 warning/관측 지표로 수집한다.
+- k6 응답 counter는 user-facing 응답 수를 세는 보조 지표이며, 초과판매 판정은 DB snapshot으로 한다.
 
 ## 첨부할 근거
 
