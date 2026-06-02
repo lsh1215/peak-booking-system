@@ -1,0 +1,8 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: booking-rate-limit
+spec:
+  rateLimit:
+    average: 2500
+    burst: 3000
