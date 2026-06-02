@@ -16,11 +16,14 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 @Service
 public class BookingAdmissionService {
 
     private static final Logger log = LoggerFactory.getLogger(BookingAdmissionService.class);
+    private static final int REDIS_ADMISSION_PERSISTENCE_ATTEMPTS = 3;
+    private static final Duration REDIS_ADMISSION_PERSISTENCE_BACKOFF = Duration.ofMillis(20);
 
     private final BookingProperties properties;
     private final BookingJpaRepository repository;
@@ -28,6 +31,7 @@ public class BookingAdmissionService {
     private final AdmissionTransactionService transactionService;
     private final BookingDbWriteBulkhead dbWriteBulkhead;
     private final Semaphore dbFallbackBulkhead;
+    private final Semaphore redisFailureDiagnosis = new Semaphore(1);
     private final Duration gateModeCacheTtl;
     private final ConcurrentMap<String, CachedGateMode> gateModeCache = new ConcurrentHashMap<>();
 
@@ -60,29 +64,43 @@ public class BookingAdmissionService {
         } catch (RedisSystemException
                  | QueryTimeoutException
                  | DataAccessResourceFailureException redisFailure) {
-            try {
-                result = tryRedisAdmission(saleEventId, productId, userId);
-            } catch (RedisSystemException
-                     | QueryTimeoutException
-                     | DataAccessResourceFailureException retryFailure) {
-                redisFailure.addSuppressed(retryFailure);
-                if (isRedisCommandTimeout(redisFailure) || isRedisCommandTimeout(retryFailure)) {
-                    log.debug(
-                            "Redis admission timed out after retry; rejecting saleEventId={} productId={} without DB fallback",
-                            saleEventId,
-                            productId,
-                            redisFailure
-                    );
-                    return AdmissionDecision.rejected(GateMode.REDIS);
+            if (!redisFailureDiagnosis.tryAcquire()) {
+                if (cachedGateMode(saleEventId, productId) == GateMode.DB_FALLBACK) {
+                    return dbFallbackAdmission(saleEventId, productId, userId, bookingAttemptId, false);
                 }
-                return switchToDbFallback(saleEventId, productId, userId, bookingAttemptId, redisFailure);
+                return AdmissionDecision.rejected(GateMode.REDIS);
+            }
+            try {
+                if (cachedGateMode(saleEventId, productId) == GateMode.DB_FALLBACK) {
+                    return dbFallbackAdmission(saleEventId, productId, userId, bookingAttemptId, false);
+                }
+                try {
+                    result = tryRedisAdmission(saleEventId, productId, userId);
+                } catch (RedisSystemException
+                         | QueryTimeoutException
+                         | DataAccessResourceFailureException retryFailure) {
+                    redisFailure.addSuppressed(retryFailure);
+                    if ((isRedisCommandTimeout(redisFailure) || isRedisCommandTimeout(retryFailure))
+                            && redisStillHealthy()) {
+                        log.debug(
+                                "Redis admission timed out after retry while Redis health is still OK; rejecting saleEventId={} productId={} without DB fallback",
+                                saleEventId,
+                                productId,
+                                redisFailure
+                        );
+                        return AdmissionDecision.rejected(GateMode.REDIS);
+                    }
+                    return switchToDbFallback(saleEventId, productId, userId, bookingAttemptId, redisFailure);
+                }
+            } finally {
+                redisFailureDiagnosis.release();
             }
         }
         if (!result.admitted()) {
             return AdmissionDecision.rejected(GateMode.REDIS);
         }
         RedisAdmissionGateway.Result admittedResult = result;
-        return dbWriteBulkhead.execute(() -> transactionService.createAdmission(
+        return persistRedisAdmission(
                 saleEventId,
                 productId,
                 userId,
@@ -90,7 +108,50 @@ public class BookingAdmissionService {
                 GateMode.REDIS,
                 admittedResult.redisSeq(),
                 properties.candidateLimit()
-        ));
+        );
+    }
+
+    private AdmissionDecision persistRedisAdmission(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId,
+            GateMode gateMode,
+            long redisSeq,
+            int candidateLimit
+    ) {
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= REDIS_ADMISSION_PERSISTENCE_ATTEMPTS; attempt++) {
+            try {
+                return transactionService.createAdmission(
+                        saleEventId,
+                        productId,
+                        userId,
+                        bookingAttemptId,
+                        gateMode,
+                        redisSeq,
+                        candidateLimit
+                );
+            } catch (CannotCreateTransactionException
+                     | QueryTimeoutException
+                     | DataAccessResourceFailureException transientDbFailure) {
+                lastFailure = transientDbFailure;
+                if (attempt == REDIS_ADMISSION_PERSISTENCE_ATTEMPTS) {
+                    break;
+                }
+                sleepBeforeAdmissionRetry(attempt);
+            }
+        }
+        throw lastFailure;
+    }
+
+    private void sleepBeforeAdmissionRetry(int attempt) {
+        try {
+            Thread.sleep(REDIS_ADMISSION_PERSISTENCE_BACKOFF.multipliedBy(attempt).toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while persisting Redis admission", e);
+        }
     }
 
     private RedisAdmissionGateway.Result tryRedisAdmission(long saleEventId, long productId, long userId) {
@@ -130,6 +191,14 @@ public class BookingAdmissionService {
             current = current.getCause();
         }
         return false;
+    }
+
+    private boolean redisStillHealthy() {
+        try {
+            return redisAdmissionGateway.ping();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private AdmissionDecision dbFallbackAdmission(
