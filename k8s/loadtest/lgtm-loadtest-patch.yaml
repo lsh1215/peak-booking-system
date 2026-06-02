@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lgtm
+spec:
+  template:
+    spec:
+      nodeSelector:
+        peak-booking/node-role: lgtm

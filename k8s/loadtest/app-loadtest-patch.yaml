@@ -4,8 +4,22 @@ metadata:
   name: booking-service
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   template:
     spec:
+      nodeSelector:
+        peak-booking/node-role: was
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: booking-service
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: booking-service
           imagePullPolicy: Never

@@ -12,6 +12,9 @@ namespace: peak-booking
 patches:
   - path: app-loadtest-patch.yaml
   - path: config-loadtest-patch.yaml
+  - path: mysql-loadtest-patch.yaml
+  - path: redis-loadtest-patch.yaml
+  - path: lgtm-loadtest-patch.yaml
 
 images:
   - name: peak-booking/backend
