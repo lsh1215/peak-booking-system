@@ -58,9 +58,8 @@ public class BookingAdmissionService {
             return dbFallbackAdmission(saleEventId, productId, userId, bookingAttemptId, false);
         }
 
-        RedisAdmissionGateway.Result result;
         try {
-            result = tryRedisAdmission(saleEventId, productId, userId);
+            return redisAdmissionWithDurablePersistence(saleEventId, productId, userId, bookingAttemptId);
         } catch (RedisSystemException
                  | QueryTimeoutException
                  | DataAccessResourceFailureException redisFailure) {
@@ -75,7 +74,7 @@ public class BookingAdmissionService {
                     return dbFallbackAdmission(saleEventId, productId, userId, bookingAttemptId, false);
                 }
                 try {
-                    result = tryRedisAdmission(saleEventId, productId, userId);
+                    return redisAdmissionWithDurablePersistence(saleEventId, productId, userId, bookingAttemptId);
                 } catch (RedisSystemException
                          | QueryTimeoutException
                          | DataAccessResourceFailureException retryFailure) {
@@ -96,19 +95,29 @@ public class BookingAdmissionService {
                 redisFailureDiagnosis.release();
             }
         }
-        if (!result.admitted()) {
-            return AdmissionDecision.rejected(GateMode.REDIS);
-        }
-        RedisAdmissionGateway.Result admittedResult = result;
-        return persistRedisAdmission(
-                saleEventId,
-                productId,
-                userId,
-                bookingAttemptId,
-                GateMode.REDIS,
-                admittedResult.redisSeq(),
-                properties.candidateLimit()
-        );
+    }
+
+    private AdmissionDecision redisAdmissionWithDurablePersistence(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId
+    ) {
+        return dbWriteBulkhead.execute(() -> {
+            RedisAdmissionGateway.Result result = tryRedisAdmission(saleEventId, productId, userId);
+            if (!result.admitted()) {
+                return AdmissionDecision.rejected(GateMode.REDIS);
+            }
+            return persistRedisAdmission(
+                    saleEventId,
+                    productId,
+                    userId,
+                    bookingAttemptId,
+                    GateMode.REDIS,
+                    result.redisSeq(),
+                    properties.candidateLimit()
+            );
+        });
     }
 
     private AdmissionDecision persistRedisAdmission(

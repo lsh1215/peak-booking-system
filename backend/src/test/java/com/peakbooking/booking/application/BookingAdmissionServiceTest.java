@@ -55,7 +55,7 @@ class BookingAdmissionServiceTest {
     }
 
     @Test
-    void should_persist_redis_admitted_candidate_even_when_booking_write_bulkhead_is_full() {
+    void should_not_consume_redis_candidate_when_admission_persistence_budget_is_full() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
@@ -68,16 +68,13 @@ class BookingAdmissionServiceTest {
                 Duration.ofSeconds(1)
         );
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
-        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenReturn(new RedisAdmissionGateway.Result(true, 7));
-        when(transactionService.createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 7L, 30))
-                .thenReturn(AdmissionDecision.admitted(10, 1, 7L, 1, GateMode.REDIS));
 
-        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+        assertThatThrownBy(() -> service.admit(1, 1, 101, "attempt-101"))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(BookingErrorCode.SERVICE_BUSY));
 
-        assertThat(decision.result()).isEqualTo(AdmissionResult.ADMITTED);
-        assertThat(decision.redisSeq()).isEqualTo(7L);
-        verify(transactionService).createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 7L, 30);
+        verifyNoInteractions(redisAdmissionGateway);
+        verifyNoInteractions(transactionService);
     }
 
     @Test
