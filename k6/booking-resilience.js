@@ -332,7 +332,7 @@ export function handleSummary(data) {
     `scenario=${scenario}`,
     `scenario_kind=${scenarioKind}`,
     `rate=${rate}/s duration=${duration}`,
-    `confirmed=${metricCount(data, 'booking_confirmed_total')}`,
+    `confirmed_responses=${metricCount(data, 'booking_confirmed_response_total')}`,
     `controlled_rejected=${metricCount(data, 'booking_controlled_rejected_total')}`,
     `payment_unknown=${metricCount(data, 'booking_payment_unknown_total')}`,
     `waiting=${metricCount(data, 'booking_waiting_total')}`,

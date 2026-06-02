@@ -2,7 +2,7 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 
-export const bookingConfirmed = new Counter('booking_confirmed_total');
+export const bookingConfirmedResponses = new Counter('booking_confirmed_response_total');
 export const bookingWaiting = new Counter('booking_waiting_total');
 export const bookingPaymentUnknown = new Counter('booking_payment_unknown_total');
 export const bookingControlledRejected = new Counter('booking_controlled_rejected_total');
@@ -100,7 +100,7 @@ export function recordBookingOutcome(response) {
     return;
   }
   if (response.status === 201 || code === 'BOOKING_CONFIRMED') {
-    bookingConfirmed.add(1);
+    bookingConfirmedResponses.add(1);
     return;
   }
   if (code === 'WAITING_CANDIDATE' || code === 'BOOKING_IN_PROGRESS') {
