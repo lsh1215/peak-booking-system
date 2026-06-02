@@ -78,6 +78,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name:unknown}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 springdoc:
   info:

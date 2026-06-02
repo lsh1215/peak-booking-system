@@ -1,0 +1,148 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "title": "Template basis: Grafana MySQL / mysqld_exporter dashboards",
+      "type": "link",
+      "url": "https://grafana.com/grafana/dashboards/?search=mysqld_exporter"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"expr": "up{job=\"peak-booking-mysql\"}", "legendFormat": "mysql exporter", "refId": "A"}],
+      "title": "Exporter Up",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "mysql_global_status_threads_connected", "legendFormat": "connected", "refId": "A"},
+        {"expr": "mysql_global_status_threads_running", "legendFormat": "running", "refId": "B"}
+      ],
+      "title": "Threads",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "rate(mysql_global_status_queries[$__rate_interval])", "legendFormat": "queries/s", "refId": "A"},
+        {"expr": "rate(mysql_global_status_questions[$__rate_interval])", "legendFormat": "questions/s", "refId": "B"}
+      ],
+      "title": "Query Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "rate(mysql_global_status_connections[$__rate_interval])", "legendFormat": "new connections/s", "refId": "A"},
+        {"expr": "rate(mysql_global_status_aborted_connects[$__rate_interval])", "legendFormat": "aborted connects/s", "refId": "B"}
+      ],
+      "title": "Connection Churn",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 7},
+      "id": 5,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "rate(mysql_global_status_innodb_row_lock_waits[$__rate_interval])", "legendFormat": "row lock waits/s", "refId": "A"},
+        {"expr": "rate(mysql_global_status_innodb_row_lock_time[$__rate_interval])", "legendFormat": "row lock time ms/s", "refId": "B"}
+      ],
+      "title": "InnoDB Row Lock Pressure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 7},
+      "id": 6,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "rate(mysql_global_status_slow_queries[$__rate_interval])", "legendFormat": "slow queries/s", "refId": "A"},
+        {"expr": "rate(mysql_global_status_select_full_join[$__rate_interval])", "legendFormat": "full joins/s", "refId": "B"},
+        {"expr": "rate(mysql_global_status_created_tmp_disk_tables[$__rate_interval])", "legendFormat": "tmp disk tables/s", "refId": "C"}
+      ],
+      "title": "Query Quality Signals",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 7},
+      "id": 7,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "mysql_global_variables_innodb_buffer_pool_size", "legendFormat": "buffer pool size", "refId": "A"},
+        {"expr": "mysql_global_status_innodb_buffer_pool_bytes_data", "legendFormat": "buffer pool data", "refId": "B"},
+        {"expr": "mysql_global_status_innodb_buffer_pool_bytes_dirty", "legendFormat": "buffer pool dirty", "refId": "C"}
+      ],
+      "title": "InnoDB Buffer Pool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 14},
+      "id": 8,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "expr": "1 - (rate(mysql_global_status_innodb_buffer_pool_reads[$__rate_interval]) / clamp_min(rate(mysql_global_status_innodb_buffer_pool_read_requests[$__rate_interval]), 1))",
+          "legendFormat": "buffer pool hit ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Buffer Pool Hit Ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 14},
+      "id": 9,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "mysql_global_variables_max_connections", "legendFormat": "max connections", "refId": "A"},
+        {"expr": "mysql_global_status_max_used_connections", "legendFormat": "max used connections", "refId": "B"}
+      ],
+      "title": "Connection Capacity",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["peak-booking", "mysql", "mysqld-exporter"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Peak Booking MySQL",
+  "uid": "peak-booking-mysql",
+  "version": 1,
+  "weekStart": ""
+}

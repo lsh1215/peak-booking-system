@@ -96,9 +96,8 @@ spec:
               mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/custom.yaml
               subPath: custom.yaml
               readOnly: true
-            - name: jvm-dashboard
-              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/custom/peak-booking-loadtest-dashboard.json
-              subPath: peak-booking-loadtest-dashboard.json
+            - name: grafana-dashboards
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
               readOnly: true
           resources:
             requests:
@@ -114,6 +113,6 @@ spec:
         - name: grafana-dashboard-provider
           configMap:
             name: lgtm-grafana-dashboard-provider
-        - name: jvm-dashboard
+        - name: grafana-dashboards
           configMap:
-            name: lgtm-loadtest-dashboard
+            name: lgtm-grafana-dashboards

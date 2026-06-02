@@ -10,3 +10,17 @@ scrape_configs:
           - booking-service:8080
         labels:
           application: peak-booking-service
+  - job_name: peak-booking-mysql
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - mysql:9104
+        labels:
+          application: peak-booking-mysql
+  - job_name: peak-booking-redis
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - redis:9121
+        labels:
+          application: peak-booking-redis

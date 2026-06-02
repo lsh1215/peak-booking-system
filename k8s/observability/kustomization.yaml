@@ -13,9 +13,12 @@ configMapGenerator:
   - name: lgtm-grafana-dashboard-provider
     files:
       - custom.yaml=custom.yaml
-  - name: lgtm-loadtest-dashboard
+  - name: lgtm-grafana-dashboards
     files:
       - peak-booking-loadtest-dashboard.json=peak-booking-loadtest-dashboard.json
+      - peak-booking-bottleneck-dashboard.json=dashboards/peak-booking-bottleneck-dashboard.json
+      - mysql-exporter-dashboard.json=dashboards/mysql-exporter-dashboard.json
+      - redis-exporter-dashboard.json=dashboards/redis-exporter-dashboard.json
 
 generatorOptions:
   disableNameSuffixHash: true

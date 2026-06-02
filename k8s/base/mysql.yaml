@@ -10,6 +10,9 @@ spec:
     - name: mysql
       port: 3306
       targetPort: mysql
+    - name: metrics
+      port: 9104
+      targetPort: metrics
   selector:
     app.kubernetes.io/name: mysql
 ---
@@ -72,6 +75,47 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.15.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.my-cnf=/etc/mysqld-exporter/mysqld-exporter.cnf
+            - --no-collect.slave_status
+          env:
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQLD_EXPORTER_DATA_SOURCE_NAME
+          ports:
+            - name: metrics
+              containerPort: 9104
+          volumeMounts:
+            - name: mysqld-exporter-config
+              mountPath: /etc/mysqld-exporter
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: mysqld-exporter-config
+          secret:
+            secretName: mysql-secret
+            items:
+              - key: mysqld-exporter.cnf
+                path: mysqld-exporter.cnf
   volumeClaimTemplates:
     - metadata:
         name: mysql-data
