@@ -2,7 +2,7 @@
 
 이 문서는 `00시` 오픈, `10개 한정` 초특가 숙소 상품의 선착순 예약/결제 backend에서 요구사항을 만족하기 위해 내린 핵심 기술 의사결정을 기록한다.
 
-기술 스택 자체를 무엇으로 정했는지는 이 문서의 중심 주제가 아니다. 여기서는 요구사항이 직접 요구하는 재고 정합성, 공정성, Redis 장애 대응, 멱등성, 결제 실패 처리, 결제 확장성, 과부하 방어 판단만 다룬다.
+기술 스택 자체를 단순 나열하는 것은 이 문서의 중심 주제가 아니다. 여기서는 요구사항이 직접 요구하는 재고 정합성, 공정성, Redis 장애 대응, 멱등성, 결제 실패 처리, 결제 확장성, 과부하 방어 판단을 다룬다. 라이브러리와 외부 구성요소는 "어떤 문제를 해결하기 위해 도입했는가"가 분명한 경우에만 별도 쟁점으로 기록한다.
 
 ## 목차
 
@@ -13,6 +13,7 @@
 5. [결제 수단 확장성](#쟁점-5-결제-수단-확장성)
 6. [피크 트래픽 방어와 rate limiter](#쟁점-6-피크-트래픽-방어와-rate-limiter)
 7. [테스트와 관측 기준](#쟁점-7-테스트와-관측-기준)
+8. [라이브러리와 외부 구성요소 도입 범위](#쟁점-8-라이브러리와-외부-구성요소-도입-범위)
 
 ---
 
@@ -381,3 +382,43 @@ Hard correctness fail은 아래와 같다.
 - deadline 이후 release된 reservation이 늦은 PG success로 다시 confirmed가 된다.
 
 Latency/resource 기준은 실측으로 보정할 수 있지만, 위 correctness 기준은 완화하지 않는다.
+
+---
+
+## 쟁점 8. 라이브러리와 외부 구성요소 도입 범위
+
+### 상황
+
+요구사항은 동작 가능한 소스 코드와 실행 방법을 요구한다. 동시에 추가 인프라를 사용했다면 이유와 비용 대비 효과를 설명해야 한다.
+
+이 시스템은 `10개` 한정 상품을 다루므로, 기능 구현만 보면 단순 CRUD처럼 보일 수 있다. 하지만 실제 문제는 중복 클릭, 결제 timeout, Redis 장애, 피크 트래픽, DB 압박이 겹칠 때 정합성을 지키는 것이다. 따라서 라이브러리와 외부 구성요소는 "있으면 좋아 보이는 기술"이 아니라 "요구사항의 특정 위험을 낮추는 도구"일 때만 도입한다.
+
+### 선택지
+
+| 선택지 | 장점 | 단점 | 판단 |
+|---|---|---|---|
+| Spring Boot + MySQL만 사용 | 구성요소가 가장 적다 | 피크 admission을 모두 DB write로 받아야 해서 공유 DB 보호가 어렵다 | 단독으로 거절 |
+| Redis 단일 인스턴스만 사용 | admission이 빠르고 구현이 쉽다 | Redis 장애 시 failover/fairness 문제가 커진다 | 단독으로 거절 |
+| Redis HA + MySQL final guard | 정상 경로는 빠르게 거르고, Redis 단일 장애 시간을 줄이며, 최종 정합성은 DB가 보장한다 | Redis Sentinel/replica 운영 복잡도가 추가된다 | 수용 |
+| Kafka/Queue 기반 durable admission log 추가 | Redis 장애 중에도 공식 도착 순서를 계속 저장할 수 있다 | 현재 요구사항 대비 운영 비용과 구현 범위가 크다 | 보류 |
+| full microservice/payment service 분리 | 독립 배포와 조직 확장에 유리하다 | 현재 과제의 핵심 위험보다 운영 복잡도가 먼저 커진다 | 거절 |
+
+### 왜 그렇게 판단했는지
+
+| 구성요소 | 도입 이유 | 거절한 단순안 | 문제 해결 전략 |
+|---|---|---|---|
+| Spring Boot 3.x | Java 21 기반 REST API, validation, scheduling, metrics를 빠르게 구성한다 | 직접 HTTP 서버 구현 | application service boundary에 transaction을 두고, controller는 요청/응답 변환에 집중한다 |
+| Spring Data JPA / Hibernate | domain entity와 repository를 명확히 두고 MySQL schema와 매핑한다 | JDBC string query 중심 구현 | 단, hot-path atomic update와 lease claim은 repository query로 명확히 표현한다 |
+| MySQL 8 | 최종 재고 원장, admission ledger, idempotency, payment/recovery state를 durable하게 저장한다 | Redis를 최종 원장으로 사용 | `reservation` + atomic counter + DB constraint로 `<= 10`을 보장한다 |
+| Redis HA | 정상 경로 admission을 빠르게 처리하고 Redis 단일 장애 시간을 줄인다 | 단일 Redis 또는 DB fallback only | Lua admission + `WAIT` + Sentinel failover + failover pause를 사용한다 |
+| Traefik | k3s 환경에서 2개 이상 WAS 앞단의 LB와 1차 route-level shedding을 담당한다 | app 내부 방어만 사용 | gateway는 WAS 보호만 담당하고, 공정성/중복 방지는 app/DB가 담당한다 |
+| k6 | 피크, 장애, 중복 클릭, mixed 시나리오를 재현한다 | 수동 curl 또는 smoke test만 사용 | 정상/Redis failover/WAS down/PG timeout/mixed를 분리해 검증한다 |
+| LGTM + Micrometer | p95/p99, Hikari pressure, Redis 상태, JVM 지표를 관측한다 | 로그만 확인 | 성능 실패와 정합성 실패를 분리해서 판단한다 |
+| Testcontainers | MySQL/Redis 통합 동작을 테스트에서 고정한다 | in-memory DB로 대체 | DB constraint, Redis admission, recovery query가 실제 의존성 위에서 동작하는지 검증한다 |
+
+추가 인프라의 ROI는 다음 기준으로 판단한다.
+
+- Redis HA는 Redis 장애 요구사항을 직접 다루므로 수용한다.
+- Traefik은 `2+` stateless WAS 앞단의 LB가 필요하고, WAS 보호용 rate limit을 제공하므로 수용한다.
+- LGTM과 k6는 설계가 실제로 버티는지 증명하는 검증 도구이므로 수용한다.
+- Kafka/Queue는 Redis 장애 중에도 판매를 계속해야 하는 더 강한 요구가 생기면 검토한다. 현재는 Redis HA + failover pause가 비용 대비 효과가 더 크다.

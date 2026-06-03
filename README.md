@@ -5,155 +5,402 @@
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5.x-6DB33F?style=flat-square&logo=springboot&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL_8-4479A1?style=flat-square&logo=mysql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis_HA-DC382D?style=flat-square&logo=redis&logoColor=white)
+![k6](https://img.shields.io/badge/k6-load_test-7D64FF?style=flat-square&logo=k6&logoColor=white)
 
-`00:00`에 오픈되는 한정 재고 숙소 상품을 위한 예약/결제 백엔드 프로젝트입니다.
+`00:00`에 열리는 `10개 한정` 숙소 상품을 선착순으로 예약하고 결제하는 백엔드입니다.
+
+이 프로젝트의 핵심은 "빠르게 10건을 판다"가 아니라, 피크 트래픽과 장애가 겹쳐도 아래 불변식을 지키는 것입니다.
+
+- 확정 예약은 절대 `10건`을 초과하지 않는다.
+- 같은 사용자의 중복 클릭은 구매 확률을 높이지 못한다.
+- 결제 실패는 확정 예약을 만들지 않는다.
+- Redis 장애는 초과판매나 DB 붕괴로 이어지지 않는다.
+- PG timeout/응답 유실 뒤에도 재고가 영구히 잠기지 않는다.
 
 ## 목차
 
-- [프로젝트 개요](#프로젝트-개요)
-- [기술 스택](#기술-스택)
-- [프로젝트 구조](#프로젝트-구조)
-- [시작 방식](#시작-방식)
-- [API 엔드포인트](#api-엔드포인트)
+- [시스템 개요](#시스템-개요)
+- [아키텍처](#아키텍처)
+- [실행 방법](#실행-방법)
+- [API 사용 예시](#api-사용-예시)
+- [예약/결제 시퀀스](#예약결제-시퀀스)
+- [ERD와 DDL](#erd와-ddl)
+- [테스트와 관측](#테스트와-관측)
 - [주요 문서](#주요-문서)
-- [현재 상태](#현재-상태)
 
-## 프로젝트 개요
+## 시스템 개요
 
-이 프로젝트는 `00:00`에 오픈되는 `10개 한정` 초특가 숙소 상품 예약 시스템을 구현합니다. 오픈 직후 짧은 시간 동안 높은 트래픽이 몰리며, 프로모션 중 인프라 증설(scale-up/out)이 제한적인 상황을 가정합니다.
+요구사항은 평시 `50 TPS`, 프로모션 오픈 직후 `1~5분` 동안 `500~1000 TPS` 급증을 가정합니다. 또한 인프라 증설이 제한적이고, `2개 이상`의 stateless WAS replica를 전제로 합니다.
 
-핵심 목표는 단순히 성공 예약을 처리하는 것이 아니라, 압박 상황에서도 정합성을 증명하는 것입니다.
+이 조건에서 모든 요청을 DB transaction까지 들여보내면 성공 예약은 10건뿐인데 실패 요청이 DB를 압박합니다. 그래서 정상 경로는 Redis admission gate가 빠르게 후보를 거르고, MySQL은 최종 정합성 원장으로만 사용합니다.
 
-- `10개` 재고 수량을 초과하는 초과 판매 방지
-- 결제 실패 또는 시스템 장애 후 재고가 영구히 잠기는 문제 방지
-- 중복 클릭과 재시도에 대한 공정하고 멱등적인 처리
-- Redis, DB, 결제 경로 장애 시 예측 가능한 degraded behavior
-- Redis admission, DB 최종 정합성, 멱등성, fallback, 부하 테스트에 대한 의사결정 기록
+Redis는 최종 재고 원장이 아닙니다. Redis HA와 failover pause를 사용해 Redis 단일 장애 시간을 줄이고, failover 중에는 DB로 무제한 우회하지 않고 짧게 통제 거절합니다.
 
-## 기술 스택
+## 아키텍처
 
-아래 스택은 현재 원격 `main`에 반영된 bootstrap 기준이며, [DECISIONS.md](docs/decisions/DECISIONS.md)의 DEC-000에서 승인된 프로젝트 baseline입니다.
+```mermaid
+flowchart LR
+    User["사용자"]
+    Traefik["Traefik<br/>LB / 1차 rate limit"]
+    AppA["Booking Service A<br/>stateless Spring Boot"]
+    AppB["Booking Service B<br/>stateless Spring Boot"]
+    RedisPrimary["Redis primary<br/>admission gate"]
+    RedisReplica["Redis replicas<br/>HA / WAIT"]
+    Sentinel["Redis Sentinel<br/>failover 감지"]
+    MySQL["MySQL 8<br/>final inventory guard"]
+    MockPG["Mock PG<br/>confirm / query / cancel"]
+    LGTM["LGTM<br/>logs / metrics / traces"]
 
-| 영역 | 선택 |
-|---|---|
-| Language | Java 21 |
-| Framework | Spring Boot 3.5.x |
-| Runtime | Spring MVC 또는 WebFlux 중 설계 검증 후 결정 |
-| Database | MySQL 8 |
-| Cache / Admission Control | Redis |
-| ORM | Spring Data JPA / Hibernate |
-| Load Testing | k6 |
-| Observability | LGTM stack, Micrometer Prometheus, OpenTelemetry Java agent |
-| Documentation | Markdown, ADR-style decision records, source-backed research notes |
-
-## 프로젝트 구조
-
-```text
-.
-├── AGENTS.md
-├── README.md
-├── README-en.md
-├── backend
-│   ├── build.gradle
-│   ├── settings.gradle
-│   ├── src
-│   └── Dockerfile
-├── docker-compose.yml
-├── infra
-│   └── observability
-├── k6
-├── k8s
-├── docs
-│   ├── requirements.md
-│   ├── ai
-│   ├── decisions
-│   ├── research
-│   ├── reviews
-│   ├── system-design
-│   └── testing
-└── .codex
-    ├── agents
-    ├── hooks
-    └── skills
+    User --> Traefik
+    Traefik --> AppA
+    Traefik --> AppB
+    AppA --> RedisPrimary
+    AppB --> RedisPrimary
+    RedisPrimary --> RedisReplica
+    Sentinel --> RedisPrimary
+    Sentinel --> RedisReplica
+    AppA --> MySQL
+    AppB --> MySQL
+    AppA --> MockPG
+    AppB --> MockPG
+    AppA --> LGTM
+    AppB --> LGTM
+    Traefik --> LGTM
 ```
 
-현재 백엔드는 단일 Spring Boot 애플리케이션으로 시작합니다. 애플리케이션은 stateless 서버로 유지하지만, 피크 순간의 정합성과 붕괴 방지는 단순 replica 증설이 아니라 admission, backpressure, RDB 최종 정합성 guard로 설명해야 합니다.
+| 구성요소 | 역할 | 정합성 책임 |
+|---|---|---|
+| Traefik | WAS 앞단의 LB와 1차 rate limit | 공정성/중복 방지 원장이 아님 |
+| Redis HA | 정상 경로 admission gate, 중복 사용자 빠른 차단, 후보군 제한 | 최종 재고 원장이 아님 |
+| MySQL | admission ledger, reservation, idempotency, payment 상태 저장 | 최종 재고 정합성 원장 |
+| Booking Service | 예약/결제 흐름 조정, bulkhead, recovery scheduler | stateless 유지 |
+| Mock PG | 승인/조회/취소/timeout/unknown 시뮬레이션 | 실제 PG 연동을 대체하는 테스트 포트 |
+| LGTM | Grafana, Loki, Tempo, Mimir 기반 관측 | 병목과 장애 결과 확인 |
 
-- `backend/src/main/java/com/peakbooking`: 단일 Spring Boot 애플리케이션 진입점
-- `backend/src/main/java/com/peakbooking/common`: 공통 응답/예외/JPA auditing/CORS/OpenAPI 설정
-- `backend/src/main/java/com/peakbooking/booking`: 예약 도메인 API를 확장할 패키지와 초기 헬스체크 API
-- `infra/observability`: LGTM 로컬 관측 스택 설정과 Grafana dashboard provisioning
-- `k6`: 헬스체크 smoke 부하 테스트
-- `k8s`: Kubernetes 배포용 kustomize manifests
+핵심 재고 불변식은 MySQL에서 보장합니다.
 
-## 시작 방식
+```text
+HELD + PAYMENT_UNKNOWN + CONFIRMED <= total_stock
+total_stock = 10
+```
 
-로컬은 Docker Compose 기준으로 MySQL, Redis, LGTM, 애플리케이션을 함께 실행합니다.
+## 실행 방법
+
+코드 수정 없이 실행할 수 있습니다. 로컬 실행에 필요한 인프라는 Docker Compose가 함께 올립니다.
+
+### 사전 준비
+
+- Java 21
+- Docker / Docker Compose
+- Kubernetes 검증 시 `kubectl`, `kustomize`, k3s 또는 호환 Kubernetes cluster
+
+### 추가 인프라 구성
+
+| 목적 | 로컬 기본 실행 | k8s/loadtest 실행 |
+|---|---|---|
+| DB | MySQL 8 container | MySQL manifest |
+| Redis | 단일 Redis container | Redis primary + replica 2 + Sentinel 3 |
+| LB/API gateway | Docker port mapping | Traefik Ingress |
+| 관측 | LGTM container | LGTM manifest + Grafana dashboard |
+| 부하 테스트 | k6 container | 외부 k6 또는 k6 script |
+
+로컬 Docker Compose는 빠른 기능 확인용이라 Redis 단일 인스턴스를 사용합니다. Redis HA/failover 검증은 `k8s/loadtest` overlay에서 수행합니다.
+
+### 로컬 실행
 
 ```bash
-# 1. 컴파일/테스트
+# 1. 테스트
 cd backend
-./gradlew compileJava test --no-daemon
+./gradlew test --no-daemon
 cd ..
 
-# 2. 로컬 전체 스택 실행
+# 2. MySQL, Redis, LGTM, booking-service 실행
 docker compose up -d mysql redis lgtm booking-service
 
 # 3. 헬스체크
 curl http://localhost:8080/api/v1/health
 
-# 4. k6 smoke 부하 테스트
+# 4. 주문서 진입
+curl -H "X-User-Id: 1001" \
+  http://localhost:8080/api/v1/checkout/1
+
+# 5. 예약/결제 요청
+curl -X POST http://localhost:8080/api/v1/bookings \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: 1001" \
+  -d '{
+    "sale_event_id": 1,
+    "product_id": 1,
+    "booking_attempt_id": "checkout-response-booking-attempt-id",
+    "payment_methods": [
+      {"type": "CREDIT_CARD", "amount": 10000}
+    ],
+    "total_amount": 10000,
+    "currency": "KRW",
+    "mock_pg_scenario": "SUCCESS"
+  }'
+
+# 6. smoke 부하 테스트
 docker compose run --rm -e RATE=20 -e DURATION=10s k6
 
-# 5. 종료
+# 7. 종료
 docker compose down
 ```
 
-Grafana는 `http://localhost:3000`에서 확인할 수 있습니다. 기본 dashboard는 Grafana dashboard template `4701 JVM (Micrometer)`를 프로젝트용으로 provisioning합니다.
+기본 seed data는 [backend/src/main/resources/data.sql](backend/src/main/resources/data.sql)에 있습니다.
 
-Kubernetes manifest는 다음처럼 렌더링할 수 있습니다.
+- `product_id = 1`
+- `sale_event_id = 1`
+- 가격 `10000 KRW`
+- 재고 `10`
+
+Grafana는 `http://localhost:3000`에서 확인할 수 있습니다.
+
+### Kubernetes manifest 렌더링
 
 ```bash
 kubectl kustomize k8s/base
-kubectl kustomize k8s/local
+kubectl kustomize k8s/loadtest
 ```
 
-## API 엔드포인트
+`k8s/loadtest`는 Redis HA와 Traefik rate limit, LGTM dashboard를 포함합니다.
 
-초기 API 범위:
+## API 사용 예시
 
-| Method | Endpoint | 목적 | 상태 |
+| Method | Endpoint | 설명 | 구현 상태 |
 |---|---|---|---|
-| `GET` | `/api/v1/checkout/{productId}` | 상품, 숙박 기간, 가격, 사용자 Y포인트 등 주문서 진입 정보를 조회합니다. | 예정 |
-| `POST` | `/api/v1/bookings` | 결제 입력 검증, 멱등성 처리, 재고 선점/확정, 최종 예약 생성을 수행합니다. | 예정 |
-| `GET` | `/api/v1/health` | 서비스 기동 및 smoke/load-test용 헬스체크입니다. | 구현 |
+| `GET` | `/api/v1/health` | 서비스 헬스체크 | 구현 |
+| `GET` | `/api/v1/checkout/{productId}` | 주문서 진입, 상품/가격/Y포인트/`booking_attempt_id` 발급 | 구현 |
+| `POST` | `/api/v1/bookings` | 멱등성 확인, admission, 재고 점유, PG confirm, 예약 확정 | 구현 |
 
-최종 요청/응답 스키마는 시스템 설계와 도메인 모델이 확정된 뒤 문서화합니다.
+`POST /bookings`의 결제 수단은 아래를 지원합니다.
+
+| 결제 수단 | 단독 결제 | 포인트 복합 결제 | 비고 |
+|---|---:|---:|---|
+| `CREDIT_CARD` | 가능 | 가능 | `Y_PAY`와 혼용 불가 |
+| `Y_PAY` | 가능 | 가능 | `CREDIT_CARD`와 혼용 불가 |
+| `Y_POINT` | 가능 | 해당 없음 | hold -> capture -> release |
+
+Mock PG scenario는 테스트용으로 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS`를 사용합니다. 실제 PG 대신 승인/조회/취소 흐름을 재현하기 위한 값입니다.
+
+## 예약/결제 시퀀스
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 사용자
+    participant A as Booking API
+    participant R as Redis HA
+    participant D as MySQL
+    participant P as Mock PG
+    participant W as Recovery Worker
+
+    U->>A: GET /checkout/{productId}
+    A->>D: 상품/포인트 조회
+    A-->>U: 주문서 + booking_attempt_id
+
+    U->>A: POST /bookings
+    A->>D: idempotency request_hash 확인
+    A->>R: Lua admission + WAIT
+
+    alt Redis 정상 admission
+        A->>D: booking_admission 공식 기록
+        A->>D: reservation HELD + inventory counter update
+        A->>P: PG confirm(transaction 밖)
+        alt PG 성공
+            A->>D: reservation CONFIRMED
+            A-->>U: 예약 확정
+        else PG 명확한 실패
+            A->>D: reservation RELEASED + point release
+            A-->>U: 결제 실패
+        else PG timeout / unknown
+            A->>D: PAYMENT_UNKNOWN 기록
+            A-->>U: 결제 확인 중
+            W->>P: status query / cancel
+            W->>D: 30초 내 성공이면 CONFIRMED, 아니면 release
+        end
+    else Redis failover / WAIT timeout
+        A-->>U: 503 또는 429 + Retry-After
+    end
+```
+
+이 설계에서 PG 호출은 DB transaction 안에서 수행하지 않습니다. 외부 결제 지연이 DB connection과 lock을 오래 잡지 않게 하기 위해서입니다.
+
+## ERD와 DDL
+
+주문/결제 도메인 중심 ERD입니다. 실제 DDL은 [backend/src/main/resources/schema.sql](backend/src/main/resources/schema.sql)에 있습니다.
+
+```mermaid
+erDiagram
+    PRODUCT {
+        bigint id PK
+        varchar name
+        bigint price_amount
+        varchar currency
+        datetime sale_open_at
+        datetime check_in_at
+        datetime check_out_at
+    }
+
+    SALE_INVENTORY {
+        bigint id PK
+        bigint sale_event_id UK
+        bigint product_id UK
+        int total_count
+        int reserved_count
+        int payment_unknown_count
+        int confirmed_count
+    }
+
+    ADMISSION_SEQUENCE {
+        bigint id PK
+        bigint sale_event_id UK
+        bigint product_id UK
+        bigint next_seq
+        varchar gate_mode
+    }
+
+    BOOKING_ADMISSION {
+        bigint id PK
+        bigint sale_event_id UK
+        bigint product_id UK
+        bigint user_id UK
+        varchar gate_mode
+        bigint redis_seq
+        bigint db_admission_seq UK
+        int candidate_rank
+        varchar status
+        varchar booking_attempt_id
+    }
+
+    RESERVATION {
+        bigint id PK
+        bigint admission_id
+        varchar booking_attempt_id UK
+        bigint sale_event_id
+        bigint product_id
+        bigint user_id
+        varchar status
+        datetime hold_expires_at
+        datetime unknown_inventory_deadline_at
+        datetime confirmed_at
+    }
+
+    IDEMPOTENCY_RECORD {
+        bigint id PK
+        varchar booking_attempt_id UK
+        char request_hash
+        varchar status
+        int http_status
+        varchar business_code
+        text response_snapshot
+        datetime expires_at
+    }
+
+    PAYMENT_ATTEMPT {
+        bigint id PK
+        varchar booking_attempt_id UK
+        bigint reservation_id
+        varchar status
+        varchar method_type
+        bigint amount
+        varchar provider_order_id UK
+        varchar provider_payment_id
+        datetime next_reconcile_at
+        datetime active_reconcile_until
+    }
+
+    POINT_ACCOUNT {
+        bigint id PK
+        bigint user_id UK
+        bigint available_points
+        bigint held_points
+    }
+
+    POINT_HOLD {
+        bigint id PK
+        varchar booking_attempt_id UK
+        bigint point_account_id
+        bigint amount
+        varchar status
+    }
+
+    MOCK_PG_PAYMENT {
+        bigint id PK
+        varchar provider_order_id UK
+        varchar provider_payment_id UK
+        varchar scenario
+        varchar status
+        int confirm_count
+        int cancel_count
+    }
+
+    PRODUCT ||--|| SALE_INVENTORY : "has stock"
+    SALE_INVENTORY ||--|| ADMISSION_SEQUENCE : "has gate state"
+    BOOKING_ADMISSION ||--o| RESERVATION : "creates"
+    RESERVATION ||--o| PAYMENT_ATTEMPT : "paid by"
+    RESERVATION ||--o| IDEMPOTENCY_RECORD : "replayed by"
+    POINT_ACCOUNT ||--o{ POINT_HOLD : "holds"
+    POINT_HOLD }o--|| RESERVATION : "belongs to attempt"
+    PAYMENT_ATTEMPT ||--o| MOCK_PG_PAYMENT : "mock provider record"
+```
+
+주요 unique key는 비즈니스 불변식을 직접 표현합니다.
+
+| Table | Unique key | 의미 |
+|---|---|---|
+| `sale_inventory` | `(sale_event_id, product_id)` | 이벤트/상품별 재고 원장 1개 |
+| `booking_admission` | `(sale_event_id, product_id, user_id)` | 같은 사용자는 한 이벤트 상품에서 한 번만 admission chance 획득 |
+| `booking_admission` | `(sale_event_id, product_id, db_admission_seq)` | 공식 admission 순서 중복 방지 |
+| `reservation` | `booking_attempt_id` | 같은 주문서 시도에서 예약 중복 생성 방지 |
+| `idempotency_record` | `booking_attempt_id` | 멱등성 replay 기준 |
+| `payment_attempt` | `booking_attempt_id`, `provider_order_id` | 결제 side effect 중복 방지 |
+| `point_hold` | `booking_attempt_id` | 포인트 이중 hold 방지 |
+
+## 테스트와 관측
+
+### 테스트
+
+```bash
+cd backend
+./gradlew test --no-daemon
+cd ..
+
+docker compose run --rm -e RATE=20 -e DURATION=10s k6
+```
+
+주요 테스트 축은 다음입니다.
+
+- 단위 테스트: 결제 조합, request hash, admission gate 판단
+- 통합 테스트: MySQL + Redis + Mock PG를 포함한 예약/결제 상태 전이
+- k6 resilience: 정상 피크, 중복 클릭, PG timeout, Redis failover, WAS 1대 down, mixed
+- 불변식 확인: confirmed `<= 10`, occupied stock `<= 10`, duplicate PG confirm `0`
+
+### 관측
+
+Grafana dashboard는 `k8s/observability`와 `infra/observability` 아래에 있습니다. 주요 관측 지표는 다음입니다.
+
+| 영역 | 확인 지표 |
+|---|---|
+| API | endpoint별 p95/p99, 2xx/4xx/5xx, shedding ratio |
+| DB | Hikari active/idle/pending, MySQL connection/running thread |
+| Redis | exporter up, client 수, failover 중 app latency |
+| JVM | heap/non-heap, thread, CPU |
+| 정합성 | confirmed count, occupied count, late success cancel/manual review |
 
 ## 주요 문서
 
 | 문서 | 목적 |
 |---|---|
 | [요구사항](docs/requirements.md) | 공개 가능한 요구사항 요약 |
-| [문서 지도](docs/README.md) | 프로젝트 문서 인덱스 |
-| [의사결정 기록](docs/decisions/DECISIONS.md) | Redis, 멱등성, fallback, 부하 테스트 등 주요 trade-off |
-| [출처 기반 리서치](docs/research/source-backed-research-note.md) | Redis/MySQL/idempotency/resilience/PG Mock 관련 주장과 출처 |
-| [Mock Interview Design](docs/system-design/mock-interview.md) | 시스템 설계 사고 흐름 문서 |
-| [Software Design Document](docs/system-design/sdd.md) | 정식 SDD 작업 문서 |
-| [Test-First Scenarios](docs/testing/test-first-scenarios.md) | 장애, 경쟁, 중복, 과부하 시나리오를 테스트로 고정하기 위한 문서 |
-| [Bootstrap Verification](docs/testing/bootstrap-verification.md) | 백엔드/로컬 배포/관측/k6 세팅 검증 결과 |
-| [Adversarial Review](docs/reviews/adversarial-review.md) | oversell, undersell, Redis 장애, retry storm 등에 대한 critic 결과 |
-| [AI Usage](docs/ai/AI_USAGE.md) | AI 사용 범위와 사람 검증 경계 공개 문서 |
-
-## 현재 상태
-
-- [x] 공개 안전 요구사항 정리
-- [x] README 초기화
-- [x] AI usage, prompt log, conversation log 구조 생성
-- [x] Decision, research, test-first, adversarial review 문서 생성
-- [x] Spring Boot backend skeleton
-- [ ] Domain model and API schema
-- [ ] Concurrency and idempotency tests
-- [x] Initial k6 health-check load-test scenario
-- [ ] Final design decision review
+| [의사결정 기록](docs/decisions/DECISIONS.md) | Redis 장애 대응, 멱등성, 결제 실패, 결제 확장성, rate limit 판단 |
+| [Software Design Document](docs/system-design/sdd.md) | 전체 시스템 설계와 상태 전이 |
+| [Mock Interview Design](docs/system-design/mock-interview.md) | 설계 질문/답변 흐름 |
+| [Redis Admission Design](docs/system-design/redis-admission-design.md) | Redis admission과 HA/failover pause 세부 설계 |
+| [출처 기반 리서치](docs/research/source-backed-research-note.md) | 기술 주장별 근거 |
+| [테스트 시나리오](docs/testing/test-first-scenarios.md) | 구현 전에 고정한 실패/경쟁/장애 시나리오 |
+| [초기 성공 기준](docs/testing/loadtest-success-criteria-initial.md) | 실측 전 기준 |
+| [보정 성공 기준](docs/testing/loadtest-success-criteria-calibrated.md) | 실측 후 기준 |
+| [Adversarial Review](docs/reviews/adversarial-review.md) | 설계/구현 취약점 검토 로그 |
+| [AI Usage](docs/ai/AI_USAGE.md) | AI 사용 범위와 사람 검증 경계 |
