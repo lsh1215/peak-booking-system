@@ -14,10 +14,14 @@ import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionResult;
 import com.peakbooking.booking.domain.BookingErrorCode;
 import com.peakbooking.booking.domain.GateMode;
+import com.peakbooking.booking.domain.PaymentMethodType;
+import com.peakbooking.booking.domain.PaymentPlan;
+import com.peakbooking.booking.domain.PaymentPlanLine;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import com.peakbooking.booking.redis.RedisAdmissionGateway;
 import com.peakbooking.common.exception.BusinessException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -208,6 +212,45 @@ class BookingAdmissionServiceTest {
         verify(transactionService).markRedisRecovered(1, 1);
         verify(redisAdmissionGateway).probeRecovery();
         verify(redisAdmissionGateway).tryAdmit(1, 1, 102, 30);
+    }
+
+    @Test
+    void should_hold_recovered_gate_in_local_drain_window_when_backlog_remains() throws Exception {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 16, Duration.ofMillis(1)
+        );
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties);
+        waitingRoom.enqueue(localQueueCommand(201), "queued-attempt", "queued-hash");
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                waitingRoom,
+                Duration.ofMillis(1)
+        );
+        when(repository.gateMode(1, 1))
+                .thenReturn(GateMode.REDIS)
+                .thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        when(redisAdmissionGateway.probeRecovery()).thenReturn(true);
+
+        AdmissionDecision paused = service.admit(1, 1, 101, "attempt-101");
+        Thread.sleep(5);
+        AdmissionDecision drainWindow = service.admit(1, 1, 102, "attempt-102");
+
+        assertThat(paused.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(drainWindow.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(waitingRoom.shouldPreferLocalQueue()).isTrue();
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+        verify(transactionService).markRedisRecovered(1, 1);
+        verify(redisAdmissionGateway).probeRecovery();
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 102, 30);
     }
 
     @Test
@@ -583,5 +626,19 @@ class BookingAdmissionServiceTest {
             verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 102, 30);
             verify(transactionService).markRedisFailoverPaused(1, 1);
         }
+    }
+
+    private BookingCommand localQueueCommand(long userId) {
+        return new BookingCommand(
+                userId,
+                1,
+                1,
+                "token-" + userId,
+                PaymentPlan.from(List.of(new PaymentPlanLine(PaymentMethodType.CREDIT_CARD, 10_000))),
+                10_000,
+                "KRW",
+                "v1",
+                MockPgScenario.SUCCESS
+        );
     }
 }

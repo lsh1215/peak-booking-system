@@ -29,14 +29,40 @@ class LocalWaitingRoomTest {
     }
 
     @Test
-    void should_stop_preferring_local_queue_after_drain_grace_even_when_backlog_remains() throws Exception {
+    void should_keep_preferring_local_queue_before_redis_recovery_even_after_drain_grace() throws Exception {
         LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties(2, Duration.ofMillis(1)));
 
         waitingRoom.enqueue(command(101), "attempt-101", "hash-101");
         Thread.sleep(5);
 
         assertThat(waitingRoom.activeCount()).isEqualTo(1);
+        assertThat(waitingRoom.shouldPreferLocalQueue()).isTrue();
+    }
+
+    @Test
+    void should_stop_preferring_local_queue_after_recovery_drain_grace_when_backlog_remains() throws Exception {
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties(2, Duration.ofMillis(1)));
+
+        waitingRoom.enqueue(command(101), "attempt-101", "hash-101");
+        assertThat(waitingRoom.markRedisRecovered()).isTrue();
+        Thread.sleep(5);
+
+        assertThat(waitingRoom.activeCount()).isEqualTo(1);
         assertThat(waitingRoom.shouldPreferLocalQueue()).isFalse();
+    }
+
+    @Test
+    void should_restart_local_preference_when_redis_becomes_unavailable_again() throws Exception {
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties(2, Duration.ofMillis(1)));
+
+        waitingRoom.enqueue(command(101), "attempt-101", "hash-101");
+        assertThat(waitingRoom.markRedisRecovered()).isTrue();
+        Thread.sleep(5);
+        assertThat(waitingRoom.shouldPreferLocalQueue()).isFalse();
+
+        waitingRoom.markRedisUnavailable();
+
+        assertThat(waitingRoom.shouldPreferLocalQueue()).isTrue();
     }
 
     @Test

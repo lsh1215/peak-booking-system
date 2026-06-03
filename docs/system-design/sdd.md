@@ -125,7 +125,7 @@ flowchart LR
 - 멱등성은 서버 발급 `booking_attempt_id`, `request_hash`, stored logical response replay, `24h` retention을 사용한다. 이는 요구사항에서 직접 지정한 값이 아니라 `DECISIONS.md` 쟁점 3에서 수용한 설계 결정이다.
 - 공정성은 클라이언트 클릭 시각이 아니라 권위 있는 admission gate의 sequence로 판단한다.
 - **Redis 장애 시 Booking request thread는 DB admission fallback으로 직접 우회하지 않는다.** Redis HA failover 중에는 bounded WAS-local queue에 offer하고, worker만 throttled DB admission을 수행한다.
-- **Redis가 복구되어도 local queue backlog가 남아 있으면 queue drain 또는 drain-grace 전까지 새 요청을 Redis admission으로 바로 보내지 않는다.**
+- **Redis half-open probe가 성공해도 local queue backlog가 남아 있으면 queue drain 또는 복구 시점부터 drain-grace 전까지 새 요청을 Redis admission으로 바로 보내지 않는다.**
 - **Redis 장애 중 unlimited DB fallback은 금지한다.**
 - Traefik rate limit은 **WAS/DB 보호 수단이며, 중복 방지나 공정성 원장이 아니다.**
 - Java 21, Spring Boot 3.x, MySQL 8, k6, LGTM은 user가 승인한 프로젝트 baseline이다.
@@ -402,7 +402,7 @@ sequenceDiagram
 - failover 중 요청은 WAS-local bounded queue에 offer하고, 성공 시 `202 LOCAL_QUEUE_ACCEPTED`, queue full 시 `LOCAL_QUEUE_FULL + Retry-After`로 응답한다.
 - local queue worker는 fixed-delay/batch-size budget 안에서만 MySQL official admission ledger를 기록한다.
 - pause TTL 이후에는 half-open probe를 수행한다. probe는 Redis write + `WAIT`가 성공해야 통과한다.
-- half-open probe가 성공해도 local queue active_count가 0이 되거나 drain-grace가 지날 때까지 새 외부 요청은 local queue에 유지한다. 실패하면 Retry-After window 동안 반복 probe를 억제한다.
+- half-open probe가 성공해도 local queue active_count가 0이 되거나 probe 성공 시점부터 drain-grace가 지날 때까지 새 외부 요청은 local queue에 유지한다. 실패하면 Retry-After window 동안 반복 probe를 억제한다.
 - 모든 요청을 DB로 보내는 unlimited fallback은 금지한다.
 - 기존 bounded DB admission fallback 후보는 피크에서 DB 보호와 판매 지속성을 동시에 만족시키기 어려워 기본 정책에서 제거한다.
 - candidate pool은 sale event당 `30`으로 고정한다.

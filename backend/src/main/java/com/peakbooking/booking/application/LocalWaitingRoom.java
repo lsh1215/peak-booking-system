@@ -18,7 +18,7 @@ public class LocalWaitingRoom {
     private final BlockingQueue<LocalQueuedBooking> waitingQueue;
     private final ConcurrentMap<String, Entry> entries = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
-    private final AtomicLong activeSinceNanos = new AtomicLong();
+    private final AtomicLong recoveredAtNanos = new AtomicLong();
 
     public LocalWaitingRoom(BookingProperties properties) {
         this.properties = properties;
@@ -44,7 +44,6 @@ public class LocalWaitingRoom {
         if (concurrent != null) {
             return existingSubmission(concurrent, requestHash);
         }
-        markLocalQueueActive();
         if (!waitingQueue.offer(queued)) {
             entries.remove(bookingAttemptId, entry);
             return new LocalQueueSubmission(LocalQueueSubmission.Status.FULL, bookingAttemptId, 0, null);
@@ -76,19 +75,33 @@ public class LocalWaitingRoom {
             return false;
         }
         if (activeCount() == 0) {
-            activeSinceNanos.set(0);
+            recoveredAtNanos.set(0);
             return false;
+        }
+        long recoveredAt = recoveredAtNanos.get();
+        if (recoveredAt == 0) {
+            return true;
         }
         Duration drainGrace = properties.localQueue().drainGrace();
         if (drainGrace == null || drainGrace.isZero() || drainGrace.isNegative()) {
             return true;
         }
-        long activeSince = activeSinceNanos.get();
-        if (activeSince == 0) {
-            markLocalQueueActive();
-            activeSince = activeSinceNanos.get();
+        return System.nanoTime() - recoveredAt <= drainGrace.toNanos();
+    }
+
+    public void markRedisUnavailable() {
+        recoveredAtNanos.set(0);
+    }
+
+    public boolean markRedisRecovered() {
+        cleanupCompletedResults();
+        if (!properties.localQueue().enabled() || activeCount() == 0) {
+            recoveredAtNanos.set(0);
+            return false;
         }
-        return System.nanoTime() - activeSince <= drainGrace.toNanos();
+        long now = System.nanoTime();
+        recoveredAtNanos.compareAndSet(0, now);
+        return true;
     }
 
     public Optional<BookingResult> status(String bookingAttemptId) {
@@ -163,22 +176,6 @@ public class LocalWaitingRoom {
                 .filter(entry -> entry.queued.localSequence() <= target.queued.localSequence())
                 .sorted(Comparator.comparingLong(entry -> entry.queued.localSequence()))
                 .count();
-    }
-
-    private void markLocalQueueActive() {
-        long now = System.nanoTime();
-        long current = activeSinceNanos.get();
-        if (current == 0) {
-            activeSinceNanos.compareAndSet(0, now);
-            return;
-        }
-        Duration drainGrace = properties.localQueue().drainGrace();
-        if (drainGrace != null
-                && !drainGrace.isZero()
-                && !drainGrace.isNegative()
-                && now - current > drainGrace.toNanos()) {
-            activeSinceNanos.compareAndSet(current, now);
-        }
     }
 
     private void cleanupCompletedResults() {

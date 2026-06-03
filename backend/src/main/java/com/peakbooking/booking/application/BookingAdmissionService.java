@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,18 +34,21 @@ public class BookingAdmissionService {
     private final RedisAdmissionGateway redisAdmissionGateway;
     private final AdmissionTransactionService transactionService;
     private final BookingDbWriteBulkhead dbWriteBulkhead;
+    private final LocalWaitingRoom localWaitingRoom;
     private final Semaphore redisAdmissionPermits;
     private final Semaphore redisRecoveryProbePermit = new Semaphore(1);
     private final Duration gateModeCacheTtl;
     private final ConcurrentMap<String, CachedGateMode> gateModeCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Long> redisPauseUntilNanos = new ConcurrentHashMap<>();
 
+    @Autowired
     public BookingAdmissionService(
             BookingProperties properties,
             BookingJpaRepository repository,
             RedisAdmissionGateway redisAdmissionGateway,
             AdmissionTransactionService transactionService,
             BookingDbWriteBulkhead dbWriteBulkhead,
+            LocalWaitingRoom localWaitingRoom,
             @Value("${peak-booking.gate-mode-cache-ttl:1s}") Duration gateModeCacheTtl
     ) {
         this.properties = properties;
@@ -52,8 +56,28 @@ public class BookingAdmissionService {
         this.redisAdmissionGateway = redisAdmissionGateway;
         this.transactionService = transactionService;
         this.dbWriteBulkhead = dbWriteBulkhead;
+        this.localWaitingRoom = localWaitingRoom;
         this.redisAdmissionPermits = new Semaphore(Math.max(1, properties.bulkhead().redisAdmissionConcurrency()));
         this.gateModeCacheTtl = gateModeCacheTtl;
+    }
+
+    BookingAdmissionService(
+            BookingProperties properties,
+            BookingJpaRepository repository,
+            RedisAdmissionGateway redisAdmissionGateway,
+            AdmissionTransactionService transactionService,
+            BookingDbWriteBulkhead dbWriteBulkhead,
+            Duration gateModeCacheTtl
+    ) {
+        this(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                dbWriteBulkhead,
+                null,
+                gateModeCacheTtl
+        );
     }
 
     public AdmissionDecision admit(long saleEventId, long productId, long userId, String bookingAttemptId) {
@@ -378,6 +402,14 @@ public class BookingAdmissionService {
             });
             rememberGateMode(saleEventId, productId, GateMode.REDIS);
             clearLocalPause(saleEventId, productId);
+            if (startLocalQueueRecoveryDrainIfNeeded()) {
+                log.info(
+                        "Redis admission recovered, but local queue backlog remains; keeping saleEventId={} productId={} in local drain window",
+                        saleEventId,
+                        productId
+                );
+                return false;
+            }
             log.info(
                     "Redis admission recovered after half-open probe saleEventId={} productId={}",
                     saleEventId,
@@ -475,10 +507,17 @@ public class BookingAdmissionService {
         return false;
     }
 
+    private boolean startLocalQueueRecoveryDrainIfNeeded() {
+        return localWaitingRoom != null && localWaitingRoom.markRedisRecovered();
+    }
+
     private void rememberLocalPause(long saleEventId, long productId, GateMode mode) {
         if (mode != GateMode.REDIS_FAILOVER_PAUSED) {
             clearLocalPause(saleEventId, productId);
             return;
+        }
+        if (localWaitingRoom != null) {
+            localWaitingRoom.markRedisUnavailable();
         }
         Duration ttl = properties.redisFailoverRetryAfter();
         if (ttl.isZero() || ttl.isNegative()) {
