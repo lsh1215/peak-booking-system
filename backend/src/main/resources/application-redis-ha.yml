@@ -1,0 +1,7 @@
+spring:
+  data:
+    redis:
+      sentinel:
+        master: ${SPRING_DATA_REDIS_SENTINEL_MASTER:mymaster}
+        nodes: ${SPRING_DATA_REDIS_SENTINEL_NODES:redis-sentinel:26379}
+

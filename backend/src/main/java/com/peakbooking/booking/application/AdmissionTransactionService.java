@@ -42,23 +42,12 @@ public class AdmissionTransactionService {
     }
 
     @Transactional
-    public AdmissionDecision markFallbackAndCreate(
-            long saleEventId,
-            long productId,
-            long userId,
-            String bookingAttemptId,
-            int candidateLimit
-    ) {
-        repository.markDbFallback(saleEventId, productId);
-        return repository.createAdmission(
-                saleEventId,
-                productId,
-                userId,
-                bookingAttemptId,
-                GateMode.DB_FALLBACK,
-                null,
-                candidateLimit,
-                LocalDateTime.now(clock)
-        );
+    public void markRedisFailoverPaused(long saleEventId, long productId) {
+        repository.markRedisFailoverPaused(saleEventId, productId);
+    }
+
+    @Transactional
+    public void markRedisRecovered(long saleEventId, long productId) {
+        repository.markRedisRecovered(saleEventId, productId);
     }
 }

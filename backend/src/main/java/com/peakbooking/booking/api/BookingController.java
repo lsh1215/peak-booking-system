@@ -51,8 +51,15 @@ public class BookingController {
                 request.mockPgScenarioOrDefault()
         );
         BookingResult result = bookingApplicationService.book(command);
-        return ResponseEntity
-                .status(HttpStatus.valueOf(result.httpStatus()))
-                .body(ApiResponse.ok(BookingResponse.from(result)));
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.valueOf(result.httpStatus()));
+        if (BookingResult.ADMISSION_TEMPORARILY_UNAVAILABLE.equals(result.businessCode())) {
+            response.header("Retry-After", Long.toString(retryAfterSeconds()));
+        }
+        return response.body(ApiResponse.ok(BookingResponse.from(result)));
+    }
+
+    private long retryAfterSeconds() {
+        long millis = properties.redisFailoverRetryAfter().toMillis();
+        return Math.max(1, (millis + 999) / 1000);
     }
 }

@@ -12,6 +12,8 @@ public record BookingResult(
         String message
 ) {
 
+    public static final String ADMISSION_TEMPORARILY_UNAVAILABLE = "ADMISSION_TEMPORARILY_UNAVAILABLE";
+
     public boolean terminal() {
         return !retryable;
     }
