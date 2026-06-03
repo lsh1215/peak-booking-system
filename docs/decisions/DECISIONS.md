@@ -36,18 +36,18 @@
 |---|---|---|---|
 | 클라이언트 클릭 시각 기준 | 사용자 체감과 가까워 보임 | 조작/오차/네트워크 차이를 검증하기 어렵고 서버 감사가 어렵다 | 거절 |
 | Redis sequence를 최종 순서로 사용 | 빠르고 구현이 단순함 | Redis 장애/replication lag/failover 시 유실 가능성이 있어 최종 원장으로 부족하다 | 단독 기준으로 거절 |
-| MySQL admission ledger sequence를 공식 순서로 사용 | durable하고 감사 가능하며 Redis 장애 후에도 기준이 남는다 | DB write가 필요하고 hot row/candidate pool 설계가 필요하다 | 수용 |
+| MySQL `db_admission_seq`를 DB 확정 순서로 사용 | durable하고 감사 가능하며 Redis 장애 후에도 기준이 남는다 | DB write가 필요하고 hot row/candidate pool 설계가 필요하다 | 수용 |
 | 재고 1개당 row를 만들고 lock으로 점유 | 단위 재고 추적이 명확함 | 현재 `10개` 이벤트와 결제 unknown/recovery 모델에 비해 schema/state complexity가 크다 | 기본안으로 거절 |
 
 ### 왜 그렇게 판단했는지
 
-공정성은 **"누가 실제로 더 빨리 클릭했는가"가** 아니라 **"오픈 이후 유효한 첫 예약 시도가 권위 있는 서버 admission gate에 어떤 순서로 기록되었는가"로** 정의한다.
+공정성은 **"누가 실제로 더 빨리 클릭했는가"가** 아니라 **"오픈 이후 유효한 첫 예약 시도가 서버의 예약 접수 원장에 어떤 순서로 남았는가"로** 정의한다.
 
 최종 채택 구조는 다음과 같다.
 
-- Redis는 정상 경로에서 빠르게 중복 사용자, candidate limit, provisional sequence를 판단한다.
-- Redis admission이 성공해도 **MySQL `booking_admission` row가 저장되기 전까지는 유효 admission으로 보지 않는다**.
-- **공식 순서는 MySQL `db_admission_seq`다**.
+- Redis는 정상 경로에서 빠르게 중복 사용자, 후보군 제한, 임시 순번을 판단한다.
+- Redis 후보 판단이 성공해도 **MySQL `booking_admission` row가 저장되기 전까지는 유효 접수로 보지 않는다**.
+- **최종 기준 순서는 MySQL `db_admission_seq`에 저장된 DB 확정 순서다**.
 - `(sale_event_id, product_id, user_id)` unique constraint로 같은 사용자의 중복 클릭이 구매 확률을 높이지 못하게 한다.
 - candidate pool은 sale event당 `30`으로 제한한다.
 - 재고 점유는 **`reservation` row와 MySQL atomic counter guard로만 확정한다**.
@@ -79,12 +79,12 @@ WHERE sale_event_id = ?
 
 요구사항은 Redis 장애 시 fallback 전략과 근거를 요구한다. 동시에 이 시스템은 `500~1000 TPS` 피크에서 기존 서비스 DB를 터뜨리면 안 된다.
 
-처음에는 Redis 장애 시 bounded DB admission fallback을 고려했다. 하지만 단일 Redis를 완전히 내린 상태에서 `500 RPS` 이상을 DB fallback으로 바로 받아보면 두 문제가 생긴다.
+처음에는 Redis 장애 시 bounded DB 접수 fallback을 고려했다. 하지만 단일 Redis를 완전히 내린 상태에서 `500 RPS` 이상을 DB fallback으로 바로 받아보면 두 문제가 생긴다.
 
 - DB fallback concurrency를 작게 잡으면 대부분 요청이 거절되어 "Redis 장애 중에도 제한적으로 판매한다"는 목표를 달성하기 어렵다.
 - DB fallback concurrency를 크게 잡으면 공유 DB의 connection pool, lock wait, latency가 급격히 나빠질 수 있다.
 
-따라서 Redis 장애 상황에서 **request thread가 DB를 새 admission 원장으로 직접 때리는 방식은 ROI가 낮다**. 다만 완전 fail-fast만 선택하면 판매 UX가 너무 급격히 나빠지고, Redis failover 동안 유입된 사용자가 모두 이탈한다. 현재 판단은 공정성을 일부 포기하더라도 시스템 전체를 살리고 제한적인 비즈니스 연속성을 확보하는 쪽으로 바뀌었다.
+따라서 Redis 장애 상황에서 **request thread가 DB 예약 접수 원장을 직접 쓰는 fallback 방식은 ROI가 낮다**. 다만 완전 fail-fast만 선택하면 판매 UX가 너무 급격히 나빠지고, Redis failover 동안 유입된 사용자가 모두 이탈한다. 현재 판단은 공정성을 일부 포기하더라도 시스템 전체를 살리고 제한적인 비즈니스 연속성을 확보하는 쪽으로 바뀌었다.
 
 ### 선택지
 
@@ -94,11 +94,13 @@ WHERE sale_event_id = ?
 | Redis 장애 시 bounded DB fallback | Redis down 중에도 일부 판매 가능성이 있다 | 피크에서 DB 보호와 공정성을 동시에 만족시키기 어렵고, DB가 기존 서비스와 공유되면 위험하다 | 기존 후보에서 거절 |
 | Redis HA + failover pause | Redis 단일 장애 시간을 줄이고, failover 중 DB 폭주를 막으며 공정성 기준을 갈라놓지 않는다 | failover 중 판매가 멈춘다 | 이전 기본안, 현재는 보조 회복 구조 |
 | WAS-local bounded in-memory queue | Kafka/MQ 없이 장애 중 요청을 202로 받아 UX를 유지하고, worker가 DB write 속도를 제한한다 | replica 간 전역 FIFO가 아니며 WAS crash 시 해당 로컬 큐 요청이 유실될 수 있다 | 현재 fallback으로 수용 |
-| Durable admission log 추가 | Redis 장애 중에도 공식 도착 순서를 계속 보존할 수 있다 | Queue/Kafka/PubSub HA, consumer, 운영 복잡도가 크게 늘어난다 | 현재 범위에서는 보류 |
+| Durable 접수 로그 추가 | Redis 장애 중에도 공식 도착 순서를 계속 보존할 수 있다 | Queue/Kafka/PubSub HA, consumer, 운영 복잡도가 크게 늘어난다 | 현재 범위에서는 보류 |
 
 ### 왜 그렇게 판단했는지
 
 Redis 장애 대응의 핵심은 **"Redis가 죽어도 DB를 무제한으로 때리지 않는다"와** **"장애 중 유입된 요청을 bounded queue와 throttled worker로만 DB에 흘린다"다**. 기존의 전역 공정성 기준은 약해진다. Redis 장애 중에는 WAS replica별 로컬 큐 순서가 사용자 경험상 대기 순서가 되며, 전역 FIFO는 보장하지 않는다.
+
+이 local queue는 정상 경로의 stateless application 원칙에 대한 예외다. 최종 정합성 state와 durable audit state는 MySQL/Redis에 두지만, Redis 장애 중 `LOCAL_QUEUE_ACCEPTED` 후 worker가 DB 예약 접수 원장에 기록하기 전까지의 짧은 구간은 JVM local memory에 존재할 수 있다. 이 예외를 수용하는 이유는 Kafka/MQ durable queue의 운영 비용을 피하면서도 DB 폭주를 막기 위해서다.
 
 최종 채택 구조는 다음과 같다.
 
@@ -111,17 +113,17 @@ Redis config:
   min-replicas-to-write 1
   min-replicas-max-lag 1~2s
 
-Admission path:
-  Redis Lua admission
-  -> 새 admission write인 경우 WAIT 1, short timeout(예: 20~50ms)
-  -> MySQL official admission ledger write
+접수 경로:
+  Redis Lua 후보 판단
+  -> 새 접수 write인 경우 WAIT 1, short timeout(예: 20~50ms)
+  -> MySQL 예약 접수 원장 저장
 
 Failure policy:
   min-replicas 조건 불만족
   WAIT timeout
   Sentinel failover 감지
   Redis command timeout
-  -> request thread는 DB admission을 직접 수행하지 않음
+  -> request thread는 DB 접수 처리를 직접 수행하지 않음
   -> small bounded WAS-local queue에 offer
   -> 성공 시 202 LOCAL_QUEUE_ACCEPTED + booking_attempt_id
   -> queue full 또는 장애 episode 수용 예산 초과 시 429 LOCAL_QUEUE_FULL + Retry-After
@@ -130,10 +132,10 @@ Local queue policy:
   ArrayBlockingQueue(capacity 기본 WAS당 300)
   maxAcceptedPerOutage 기본 WAS당 300
   booking_attempt_id + request_hash로 로컬 dedupe/conflict 방지
-  worker는 fixedDelay/batchSize로 DB admission을 throttling
+  worker는 fixedDelay/batchSize로 DB 예약 접수 원장 저장을 throttling
   worker가 SERVICE_BUSY, DB timeout, connection failure를 만나면 complete하지 않고 retry/backoff 후 재큐잉
   retry budget 또는 max retry age를 넘을 때만 LOCAL_QUEUE_PROCESSING_UNAVAILABLE로 terminal 처리
-  DB admission은 LOCAL_QUEUE gate_mode로 MySQL official ledger에 기록
+  DB 접수 결과는 LOCAL_QUEUE gate_mode로 MySQL 예약 접수 원장에 저장
   confirmed 수는 MySQL inventory guard로 <= 10 보장
   client는 GET /bookings/status/{booking_attempt_id} 또는 POST replay로 polling
 
@@ -145,9 +147,9 @@ Recovery policy:
   실패하면 Retry-After window 동안 반복 probe를 억제
 ```
 
-이 구조는 Redis replication이나 WAS local queue가 강한 전역 공정성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL admission row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 로컬 큐도 JVM 메모리이므로 해당 WAS가 crash되면 아직 DB에 남지 않은 queue entry는 유실될 수 있다. 이를 완화하기 위해 `WAIT`, `min-replicas-to-write`, bounded queue, idempotency key, throttled worker를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다. `WAIT` 실패로 이번 요청에서 새 Redis candidate가 만들어졌지만 MySQL admission row를 만들지 않는 경우에는 Redis admission state 전체를 삭제하지 않고, `userId + redisSeq`가 일치하는 해당 신규 candidate만 조건부 보상 삭제한다.
+이 구조는 Redis replication이나 WAS local queue가 강한 전역 공정성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL 예약 접수 row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 로컬 큐도 JVM 메모리이므로 해당 WAS가 crash되면 아직 DB에 남지 않은 queue entry는 유실될 수 있다. 이를 완화하기 위해 `WAIT`, `min-replicas-to-write`, bounded queue, idempotency key, throttled worker를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다. `WAIT` 실패로 이번 요청에서 새 Redis candidate가 만들어졌지만 MySQL 예약 접수 row를 만들지 않는 경우에는 Redis 후보 상태 전체를 삭제하지 않고, `userId + redisSeq`가 일치하는 해당 신규 candidate만 조건부 보상 삭제한다.
 
-따라서 Redis 장애 중에도 판매를 계속하면서 공식 도착 순서까지 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + WAS-local bounded queue + throttled DB admission**이 더 적절하다.
+따라서 Redis 장애 중에도 판매를 계속하면서 공식 도착 순서까지 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable 접수 로그를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + WAS-local bounded queue + throttled DB 접수 처리**가 더 적절하다.
 
 현재 repository에 남기는 증거는 두 층으로 분리한다.
 
@@ -191,6 +193,9 @@ Recovery policy:
 정책은 다음과 같다.
 
 - `booking_attempt_id`는 서버가 발급한다.
+- `booking_attempt_id`는 Redis 후보 key가 아니다. Redis에는 사용자별 `userId -> redisSeq`와 ZSET 순번을 저장하고, attempt id의 권위 있는 저장소는 MySQL이다.
+- checkout 응답 직후의 `booking_attempt_id`는 DB row가 아니라 signed attempt token이다. `POST /bookings`가 시작되면 `idempotency_record`가 생성되고, 예약 접수/reservation/payment/point side effect가 생길 때 각 DB table에 같은 attempt id가 기록된다.
+- Redis 장애 중 `LOCAL_QUEUE_ACCEPTED` 직후부터 local queue worker가 DB 예약 접수 원장/idempotency record를 만들기 전까지는 해당 attempt가 JVM local queue에만 존재할 수 있다. 이는 Kafka/MQ durable queue를 도입하지 않은 비용 절감형 fallback의 명시적 trade-off다.
 - `request_hash`는 side-effect에 영향을 주는 필드만 정규화해 만든다.
 - 같은 `booking_attempt_id`와 같은 `request_hash`의 terminal replay는 저장된 logical response를 반환한다.
 - 같은 `booking_attempt_id`지만 `request_hash`가 다르면 conflict로 거절한다.
@@ -230,7 +235,9 @@ Recovery policy:
 
 요구사항은 한도 초과 같은 결제 실패 케이스에 대한 대응 로직을 요구한다. 실제 PG 연동은 범위 밖이지만, Mock PG는 실제 PG처럼 승인, 조회, 취소, 상태 변경 이벤트 흐름을 구조적으로 가져야 한다.
 
-`mock_pg_scenario`는 이 흐름을 검증하기 위한 local/test/load-test profile 전용 장애 주입 값이다. production API 계약에서는 사용자가 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS` 같은 결제 결과를 선택하는 형태로 노출하면 안 된다. 실제 운영에서는 PG adapter나 테스트 전용 내부 endpoint/header가 같은 역할을 맡아야 한다.
+현재 구현은 local/test/load-test 장애 주입을 위해 request DTO에 `mock_pg_scenario`를 포함한다. 이는 실제 PG 연동을 생략한 과제 범위에서 timeout, late success, cancel/reconciliation 흐름을 검증하기 위한 장치다.
+
+`mock_pg_scenario`는 운영 API 계약이 아니다. production hardening 단계에서는 사용자가 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS` 같은 결제 결과를 선택하는 public field를 제거하거나, profile/internal boundary로 격리해야 한다. 실제 운영에서는 PG adapter나 테스트 전용 내부 endpoint/header가 같은 역할을 맡아야 한다.
 
 결제 처리에서 가장 위험한 지점은 timeout/응답 유실이다.
 
@@ -296,7 +303,7 @@ deadline 이후 늦게 PG 성공이 확인되어도 예약을 다시 `CONFIRMED`
 1. 실패한 예약을 확정하지 않는다.
 2. 풀린 재고를 다음 후보가 가져갈 수 있게 한다.
 
-명확한 결제 실패가 확정되면 해당 admission은 실패로 닫고, 잡아두었던 `HELD` 재고를 즉시 반환한다. 그러면 대기 중인 다음 후보가 기회를 받을 수 있다.
+명확한 결제 실패가 확정되면 해당 접수는 실패로 닫고, 잡아두었던 `HELD` 재고를 즉시 반환한다. 그러면 대기 중인 다음 후보가 기회를 받을 수 있다.
 
 다만 이것은 서버가 다음 후보의 결제를 백그라운드에서 자동 실행한다는 뜻이 아니다. 결제 side effect는 사용자의 명시적인 booking request 안에서만 발생해야 한다. 따라서 다음 후보는 자신이 받은 `202 WAITING_CANDIDATE + RETRY_POST_BOOKINGS` 안내에 따라 짧게 retry/polling한다. 그 재요청 시점에 선착순/대기열 정책상 가장 앞선 유효 후보이고 waiting window 안에 있을 때만 `HELD`로 승격된다.
 
@@ -304,7 +311,7 @@ deadline 이후 늦게 PG 성공이 확인되어도 예약을 다시 `CONFIRMED`
 A candidate:
   ADMITTED -> HELD -> PAYMENT_FAILED
   reservation RELEASED
-  admission FAILED
+  booking_admission FAILED
   idempotency terminal snapshot 저장
 
 B waiting candidate:
@@ -400,7 +407,7 @@ Recovery worker 대상은 다음이다.
 | Traefik route-level rate limit | WAS 앞에서 1차 shedding 가능 | 공정성/중복 방지 원장은 될 수 없다 | 수용 |
 | Traefik Redis-backed distributed rate limit | gateway replica 간 전역 rate limit 가능 | Redis 장애 시 gateway 방어까지 Redis에 결합된다 | 거절 |
 | user-level gateway rate limit | 중복 사용자 제어에 좋아 보임 | 현재 인증/인가가 out of scope이고 user header를 gateway가 신뢰하기 어렵다 | 현재 범위에서 거절 |
-| app 내부 bulkhead/semaphore | DB/PG별 blast radius를 제한할 수 있다 | 너무 앞단에 두면 Redis admission 전에 공정성을 해칠 수 있다 | 수용하되 위치 제한 |
+| app 내부 bulkhead/semaphore | DB/PG별 blast radius를 제한할 수 있다 | 너무 앞단에 두면 Redis 후보 판단 전에 공정성을 해칠 수 있다 | 수용하되 위치 제한 |
 
 ### 왜 그렇게 판단했는지
 
@@ -415,10 +422,10 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 - Traefik은 user별 중복 방지나 공정성 원장이 아니다.
 - 사용자 중복 방지는 app/MySQL의 `(sale_event_id, product_id, user_id)` unique와 idempotency policy가 담당한다.
 - DB write, PG confirm, recovery worker는 별도 concurrency budget을 둔다.
-- DB write bulkhead는 **Redis admission을 통과한 후보를 MySQL official admission ledger에 저장할 수 있는지를** 보호하는 좁은 구간에 둔다.
-- 이 순서는 "Redis가 모든 요청의 최종 순서를 먼저 정한다"는 뜻이 아니다. **DB에 durable admission row를 남길 수 없는 요청은 Redis candidate sequence도 소비하지 않게 하려는 trade-off다**.
-- **request thread의 직접 DB fallback admission은 기본 경로에서 제거한다**.
-- **Redis failover 중 새 admission은 WAS-local bounded queue로만 받고, throttled worker가 DB admission을 수행한다**.
+- DB write bulkhead는 **Redis 후보 판단을 통과한 후보를 MySQL 예약 접수 원장에 저장할 수 있는지를** 보호하는 좁은 구간에 둔다.
+- 이 순서는 "Redis가 모든 요청의 최종 순서를 먼저 정한다"는 뜻이 아니다. **DB에 durable한 예약 접수 row를 남길 수 없는 요청은 Redis candidate sequence도 소비하지 않게 하려는 trade-off다**.
+- **request thread의 직접 DB fallback 접수는 기본 경로에서 제거한다**.
+- **Redis failover 중 새 접수는 WAS-local bounded queue로만 받고, throttled worker가 DB 접수 처리를 수행한다**.
 - **Redis가 복구되어도 local queue active_count가 0이 되거나 half-open probe 성공 시점부터 drain-grace가 지날 때까지 새 요청은 로컬 큐에 유지한다**.
 
 초기 수치는 Little's Law, HikariCP pool sizing guidance, Mock PG normal delay, k6/LGTM 실측으로 산정하고 보정한다. 단, **초과판매 금지, 중복 결제 금지, 재고 불변식 같은 hard correctness 기준은 수치 보정으로 완화하지 않는다**.
@@ -457,7 +464,7 @@ Hard correctness fail은 아래와 같다.
 - `HELD + PAYMENT_UNKNOWN + CONFIRMED <= 10`이 깨진다.
 - 같은 user/event/product에서 confirmed가 중복된다.
 - 같은 `booking_attempt_id`에서 PG confirm side effect가 2회 이상 발생한다.
-- Redis failover 중 새 admission이 DB fallback으로 무제한 우회한다.
+- Redis failover 중 새 접수가 DB fallback으로 무제한 우회한다.
 - deadline 이후 release된 reservation이 늦은 PG success로 다시 confirmed가 된다.
 
 **Latency/resource 기준은 실측으로 보정할 수 있지만, 위 correctness 기준은 완화하지 않는다.**
@@ -476,10 +483,10 @@ Hard correctness fail은 아래와 같다.
 
 | 선택지 | 장점 | 단점 | 판단 |
 |---|---|---|---|
-| Spring Boot + MySQL만 사용 | 구성요소가 가장 적다 | 피크 admission을 모두 DB write로 받아야 해서 공유 DB 보호가 어렵다 | 단독으로 거절 |
-| Redis 단일 인스턴스만 사용 | admission이 빠르고 구현이 쉽다 | Redis 장애 시 failover/fairness 문제가 커진다 | 단독으로 거절 |
+| Spring Boot + MySQL만 사용 | 구성요소가 가장 적다 | 피크 접수를 모두 DB write로 받아야 해서 공유 DB 보호가 어렵다 | 단독으로 거절 |
+| Redis 단일 인스턴스만 사용 | 후보 판단이 빠르고 구현이 쉽다 | Redis 장애 시 failover/fairness 문제가 커진다 | 단독으로 거절 |
 | Redis HA + MySQL final guard | 정상 경로는 빠르게 거르고, Redis 단일 장애 시간을 줄이며, 최종 정합성은 DB가 보장한다 | Redis Sentinel/replica 운영 복잡도가 추가된다 | 수용 |
-| Kafka/Queue 기반 durable admission log 추가 | Redis 장애 중에도 공식 도착 순서를 계속 저장할 수 있다 | 현재 요구사항 대비 운영 비용과 구현 범위가 크다 | 보류 |
+| Kafka/Queue 기반 durable 접수 로그 추가 | Redis 장애 중에도 공식 도착 순서를 계속 저장할 수 있다 | 현재 요구사항 대비 운영 비용과 구현 범위가 크다 | 보류 |
 | full microservice/payment service 분리 | 독립 배포와 조직 확장에 유리하다 | 현재 과제의 핵심 위험보다 운영 복잡도가 먼저 커진다 | 거절 |
 
 ### 왜 그렇게 판단했는지
@@ -488,17 +495,17 @@ Hard correctness fail은 아래와 같다.
 |---|---|---|---|
 | Spring Boot 3.x | Java 21 기반 REST API, validation, scheduling, metrics를 빠르게 구성한다 | 직접 HTTP 서버 구현 | application service boundary에 transaction을 두고, controller는 요청/응답 변환에 집중한다 |
 | Spring Data JPA / Hibernate | domain entity와 repository를 명확히 두고 MySQL schema와 매핑한다 | JDBC string query 중심 구현 | 단, hot-path atomic update와 lease claim은 repository query로 명확히 표현한다 |
-| MySQL 8 | 최종 재고 원장, admission ledger, idempotency, payment/recovery state를 durable하게 저장한다 | Redis를 최종 원장으로 사용 | `reservation` + atomic counter + DB constraint로 `<= 10`을 보장한다 |
-| Redis HA | 정상 경로 admission을 빠르게 처리하고 Redis 단일 장애 시간을 줄인다 | 단일 Redis 또는 DB fallback only | Lua admission + `WAIT` + Sentinel failover + half-open probe를 사용한다 |
+| MySQL 8 | 최종 재고 원장, 예약 접수 원장, idempotency, payment/recovery state를 durable하게 저장한다 | Redis를 최종 원장으로 사용 | `reservation` + atomic counter + DB constraint로 `<= 10`을 보장한다 |
+| Redis HA | 정상 경로 후보 판단을 빠르게 처리하고 Redis 단일 장애 시간을 줄인다 | 단일 Redis 또는 DB fallback only | Lua 후보 판단 + `WAIT` + Sentinel failover + half-open probe를 사용한다 |
 | WAS-local queue | Redis 장애 중 request thread의 DB 폭주 없이 제한적 판매 연속성을 제공한다 | Kafka/MQ durable queue | bounded in-memory queue + worker throttling + polling status를 사용한다 |
 | Traefik | k3s 환경에서 2개 이상 WAS 앞단의 LB와 1차 route-level shedding을 담당한다 | app 내부 방어만 사용 | gateway는 WAS 보호만 담당하고, 공정성/중복 방지는 app/DB가 담당한다 |
 | k6 | 피크, 장애, 중복 클릭, mixed 시나리오를 재현한다 | 수동 curl 또는 smoke test만 사용 | 정상/Redis failover/WAS down/PG timeout/mixed를 분리해 검증한다 |
 | LGTM + Micrometer | p95/p99, Hikari pressure, Redis 상태, JVM 지표를 관측한다 | 로그만 확인 | 성능 실패와 정합성 실패를 분리해서 판단한다 |
-| Testcontainers | MySQL/Redis 통합 동작을 테스트에서 고정한다 | in-memory DB로 대체 | DB constraint, Redis admission, recovery query가 실제 의존성 위에서 동작하는지 검증한다 |
+| Testcontainers | MySQL/Redis 통합 동작을 테스트에서 고정한다 | in-memory DB로 대체 | DB constraint, Redis 후보 판단, recovery query가 실제 의존성 위에서 동작하는지 검증한다 |
 
 추가 인프라의 ROI는 다음 기준으로 판단한다.
 
 - **Redis HA는 Redis 장애 요구사항을 직접 다루므로 수용한다**.
-- Traefik은 `2+` stateless WAS 앞단의 LB가 필요하고, WAS 보호용 rate limit을 제공하므로 수용한다.
+- Traefik은 `2+` WAS 앞단의 LB가 필요하고, WAS 보호용 rate limit을 제공하므로 수용한다.
 - LGTM과 k6는 설계가 실제로 버티는지 증명하는 검증 도구이므로 수용한다.
 - Kafka/Queue는 Redis 장애 중에도 전역 FIFO와 durable 대기열을 보장해야 하는 더 강한 요구가 생기면 검토한다. 현재는 **Redis HA + WAS-local bounded queue**가 비용 대비 효과가 더 크다.
