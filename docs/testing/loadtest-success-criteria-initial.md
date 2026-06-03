@@ -1,6 +1,6 @@
 # 부하 테스트 성공 기준 - 초기 예상 기준
 
-이 문서는 DEC-008에서 처음 세운 예상 기준을 보존한다. 이 기준은 Jeff Dean latency numbers 관점의 sanity check, Little's Law 기반 동시성 추정, Mock PG normal delay `100ms`, Redis/MySQL 왕복, app overhead, peak contention buffer를 근거로 한 첫 검증 출발점이다.
+이 문서는 초기 예상 기준을 보존한다. 이 기준은 Jeff Dean latency numbers 관점의 sanity check, Little's Law 기반 동시성 추정, Mock PG normal delay `100ms`, Redis/MySQL 왕복, app overhead, peak contention buffer를 근거로 한 첫 검증 출발점이다.
 
 이 문서의 수치는 최종 운영값이 아니라 첫 k6/LGTM 검증을 시작하기 위한 가정값이다. 실측 후 보정한 기준은 [부하 테스트 성공 기준 - 실측 보정 기준](./loadtest-success-criteria-calibrated.md)을 따른다. 단, hard correctness 기준은 실측으로 완화하지 않는다.
 
@@ -28,7 +28,7 @@
 | 재고 불변식 | DB 기준 `HELD + PAYMENT_UNKNOWN + CONFIRMED <= total_stock` |
 | 사용자 중복 확정 | 같은 `user_id + sale_event_id` confirmed 중복 `0` |
 | 결제 중복 효과 | 같은 `booking_attempt_id`의 PG confirm side effect `1회 이하` |
-| Redis 장애 fallback | unlimited DB fallback 없음 |
+| Redis 장애 fallback | unlimited DB fallback 없음. Redis HA 반영 후에는 failover 중 새 admission이 DB fallback으로 우회하지 않고 controlled rejection + half-open recovery로 처리되어야 함 |
 | PG unknown | 즉시 success로 조용히 확정하지 않으며, `30s` deadline 뒤 reservation 확정을 금지하고 재고를 release함 |
 
 ## 초기 Latency 기준
@@ -38,7 +38,7 @@
 | `GET /checkout` | p95 `<= 200ms` | p95 `> 100ms` |
 | `POST /bookings` normal confirmed | p95 `<= 500ms` | p95 `> 300ms` |
 | DB/PG 없는 controlled rejection | p95 `<= 200ms` | p95 `> 100ms` |
-| Redis down DB fallback rejection | p95 `<= 500ms` | p95 `> 300ms` |
+| Redis HA failover controlled rejection | p95 `<= 500ms` | p95 `> 300ms` |
 | PG timeout -> `PAYMENT_UNKNOWN` | p95 `<= 700ms` | p95 `> 600ms` |
 
 p99는 초기 pass/fail 기준이 아니라 warning/관측 지표로 둔다.
