@@ -1,13 +1,15 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.localqueue;
 
-record LocalQueueSubmission(
+import com.peakbooking.booking.application.dto.BookingResult;
+
+public record LocalQueueSubmission(
         Status status,
         String bookingAttemptId,
         int queuePosition,
         BookingResult completedResult
 ) {
 
-    enum Status {
+    public enum Status {
         ACCEPTED,
         ALREADY_ACCEPTED,
         ALREADY_COMPLETED,

@@ -1,4 +1,4 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.recovery;
 
 import com.peakbooking.booking.config.BookingProperties;
 import java.time.Duration;

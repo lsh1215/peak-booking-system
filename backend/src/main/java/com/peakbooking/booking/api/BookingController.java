@@ -1,10 +1,10 @@
 package com.peakbooking.booking.api;
 
-import com.peakbooking.booking.api.dto.BookingRequest;
-import com.peakbooking.booking.api.dto.BookingResponse;
+import com.peakbooking.booking.api.request.BookingRequest;
+import com.peakbooking.booking.api.response.BookingResponse;
 import com.peakbooking.booking.application.BookingApplicationService;
-import com.peakbooking.booking.application.BookingCommand;
-import com.peakbooking.booking.application.BookingResult;
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.PaymentPlan;
 import com.peakbooking.booking.domain.PaymentPlanLine;

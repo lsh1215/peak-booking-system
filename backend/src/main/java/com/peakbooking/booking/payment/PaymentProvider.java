@@ -1,6 +1,6 @@
 package com.peakbooking.booking.payment;
 
-import com.peakbooking.booking.application.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingCommand;
 
 public interface PaymentProvider {
 

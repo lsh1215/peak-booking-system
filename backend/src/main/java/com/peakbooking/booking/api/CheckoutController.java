@@ -1,6 +1,6 @@
 package com.peakbooking.booking.api;
 
-import com.peakbooking.booking.api.dto.CheckoutResponse;
+import com.peakbooking.booking.api.response.CheckoutResponse;
 import com.peakbooking.booking.application.CheckoutApplicationService;
 import com.peakbooking.common.dto.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;

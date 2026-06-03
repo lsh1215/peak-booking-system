@@ -1,7 +1,7 @@
 package com.peakbooking.booking.payment;
 
-import com.peakbooking.booking.application.BookingCommand;
-import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.payment.MockPgScenario;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.infrastructure.jpa.entity.MockPgPaymentEntity;
 import com.peakbooking.booking.infrastructure.jpa.repository.MockPgPaymentJpaRepository;

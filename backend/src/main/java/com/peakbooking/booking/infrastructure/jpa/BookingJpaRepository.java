@@ -2,8 +2,8 @@ package com.peakbooking.booking.infrastructure.jpa;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.peakbooking.booking.application.BookingResult;
-import com.peakbooking.booking.application.ProductSummary;
+import com.peakbooking.booking.application.dto.BookingResult;
+import com.peakbooking.booking.application.dto.ProductSummary;
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionStatus;
 import com.peakbooking.booking.domain.GateMode;

@@ -7,10 +7,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
+import com.peakbooking.booking.application.localqueue.LocalQueueConsumer;
+import com.peakbooking.booking.application.localqueue.LocalWaitingRoom;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.PaymentMethodType;
 import com.peakbooking.booking.domain.PaymentPlan;
 import com.peakbooking.booking.domain.PaymentPlanLine;
+import com.peakbooking.booking.payment.MockPgScenario;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;

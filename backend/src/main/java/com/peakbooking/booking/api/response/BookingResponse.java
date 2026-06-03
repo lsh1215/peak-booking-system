@@ -1,6 +1,6 @@
-package com.peakbooking.booking.api.dto;
+package com.peakbooking.booking.api.response;
 
-import com.peakbooking.booking.application.BookingResult;
+import com.peakbooking.booking.application.dto.BookingResult;
 
 public record BookingResponse(
         String businessCode,

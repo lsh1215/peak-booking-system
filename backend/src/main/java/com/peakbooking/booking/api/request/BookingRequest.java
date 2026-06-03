@@ -1,6 +1,6 @@
-package com.peakbooking.booking.api.dto;
+package com.peakbooking.booking.api.request;
 
-import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.payment.MockPgScenario;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

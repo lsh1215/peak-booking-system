@@ -1,6 +1,7 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.dto;
 
 import com.peakbooking.booking.domain.PaymentPlan;
+import com.peakbooking.booking.payment.MockPgScenario;
 
 public record BookingCommand(
         long userId,

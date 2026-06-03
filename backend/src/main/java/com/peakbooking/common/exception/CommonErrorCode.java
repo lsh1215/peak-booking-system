@@ -11,7 +11,8 @@ public enum CommonErrorCode implements ErrorCodeBase {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON_001", "Invalid input"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_002", "Resource not found"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_003", "Internal server error"),
-    FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_004", "Access denied");
+    FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON_004", "Access denied"),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "COMMON_005", "Service is temporarily busy");
 
     private final HttpStatus status;
     private final String code;

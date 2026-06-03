@@ -1,8 +1,9 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.support;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.peakbooking.booking.application.dto.BookingCommand;
 import com.peakbooking.booking.domain.PaymentPlanLine;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

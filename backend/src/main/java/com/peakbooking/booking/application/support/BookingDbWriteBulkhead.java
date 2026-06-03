@@ -1,4 +1,4 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.support;
 
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.BookingErrorCode;

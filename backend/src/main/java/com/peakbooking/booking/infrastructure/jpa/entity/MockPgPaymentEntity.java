@@ -1,6 +1,6 @@
 package com.peakbooking.booking.infrastructure.jpa.entity;
 
-import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.payment.MockPgScenario;
 import com.peakbooking.booking.payment.PaymentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,6 +1,6 @@
 package com.peakbooking.booking.payment;
 
-import com.peakbooking.booking.application.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingCommand;
 import com.peakbooking.booking.config.BookingProperties;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;

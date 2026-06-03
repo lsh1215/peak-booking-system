@@ -2,11 +2,11 @@ package com.peakbooking.booking.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.peakbooking.booking.application.AttemptTokenService;
+import com.peakbooking.booking.application.token.AttemptTokenService;
 import com.peakbooking.booking.application.BookingApplicationService;
-import com.peakbooking.booking.application.BookingCommand;
-import com.peakbooking.booking.application.BookingResult;
-import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
+import com.peakbooking.booking.payment.MockPgScenario;
 import com.peakbooking.booking.domain.PaymentMethodType;
 import com.peakbooking.booking.domain.PaymentPlan;
 import com.peakbooking.booking.domain.PaymentPlanLine;
@@ -27,7 +27,7 @@ class RedisAdmissionLimitIntegrationTest extends BookingIntegrationTestSupport {
     private AttemptTokenService attemptTokenService;
 
     @Autowired
-    private com.peakbooking.booking.application.RecoveryWorkerService recoveryWorkerService;
+    private com.peakbooking.booking.application.recovery.RecoveryWorkerService recoveryWorkerService;
 
     @Test
     void should_wait_outside_active_candidate_window_without_mysql_write_side_effects_in_normal_redis_path() {

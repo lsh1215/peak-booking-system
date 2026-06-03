@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
         }
         return ResponseEntity
                 .status(errorCode.getStatus())
-                .body(ApiResponse.error(e.getMessage()));
+                .body(ApiResponse.error(errorCode, e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -39,7 +39,7 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {}", message);
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(message));
+                .body(ApiResponse.error(CommonErrorCode.INVALID_INPUT, message));
     }
 
     @ExceptionHandler({
@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
         log.debug("Database dependency is temporarily unavailable: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ApiResponse.error("Service is temporarily busy"));
+                .body(ApiResponse.error(CommonErrorCode.SERVICE_UNAVAILABLE));
     }
 
     @ExceptionHandler(Exception.class)
@@ -60,6 +60,6 @@ public class GlobalExceptionHandler {
         log.error("Unexpected error", e);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Internal server error"));
+                .body(ApiResponse.error(CommonErrorCode.INTERNAL_ERROR));
     }
 }

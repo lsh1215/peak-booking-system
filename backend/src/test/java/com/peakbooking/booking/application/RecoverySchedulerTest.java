@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
+import com.peakbooking.booking.application.recovery.RecoveryScheduler;
+import com.peakbooking.booking.application.recovery.RecoveryWorkerService;
 import com.peakbooking.booking.config.BookingProperties;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;

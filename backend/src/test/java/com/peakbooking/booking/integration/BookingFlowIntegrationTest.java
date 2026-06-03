@@ -3,13 +3,13 @@ package com.peakbooking.booking.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.peakbooking.booking.application.AttemptTokenService;
+import com.peakbooking.booking.application.token.AttemptTokenService;
 import com.peakbooking.booking.application.BookingApplicationService;
-import com.peakbooking.booking.application.BookingCommand;
-import com.peakbooking.booking.application.BookingResult;
-import com.peakbooking.booking.application.CanonicalRequestHashCalculator;
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
+import com.peakbooking.booking.application.support.CanonicalRequestHashCalculator;
 import com.peakbooking.booking.application.CheckoutApplicationService;
-import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.payment.MockPgScenario;
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionResult;
 import com.peakbooking.booking.domain.BookingErrorCode;
@@ -765,7 +765,7 @@ class BookingFlowIntegrationTest extends BookingIntegrationTestSupport {
     }
 
     @Autowired
-    private com.peakbooking.booking.application.RecoveryWorkerService recoveryWorkerService;
+    private com.peakbooking.booking.application.recovery.RecoveryWorkerService recoveryWorkerService;
 
     private int recoverDueReservations() {
         return recoveryWorkerService.recoverDueReservations();

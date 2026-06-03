@@ -1,4 +1,4 @@
-package com.peakbooking.booking.api.dto;
+package com.peakbooking.booking.api.request;
 
 import com.peakbooking.booking.domain.PaymentMethodType;
 import jakarta.validation.constraints.NotNull;

@@ -1,5 +1,7 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.admission;
 
+import com.peakbooking.booking.application.localqueue.LocalWaitingRoom;
+import com.peakbooking.booking.application.support.BookingDbWriteBulkhead;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.BookingErrorCode;
@@ -11,9 +13,9 @@ import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.QueryTimeoutException;
@@ -61,7 +63,7 @@ public class BookingAdmissionService {
         this.gateModeCacheTtl = gateModeCacheTtl;
     }
 
-    BookingAdmissionService(
+    public BookingAdmissionService(
             BookingProperties properties,
             BookingJpaRepository repository,
             RedisAdmissionGateway redisAdmissionGateway,
@@ -176,6 +178,9 @@ public class BookingAdmissionService {
             long userId,
             String bookingAttemptId
     ) {
+        // Redis can grant a fast candidate slot, but MySQL is still the durable
+        // admission ledger. If DB persistence fails, pause admission and compensate
+        // only the newly created Redis candidate instead of flushing the whole pool.
         return dbWriteBulkhead.execute(() -> {
             if (isCrossReplicaAdmissionPaused(saleEventId, productId)) {
                 return AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED);

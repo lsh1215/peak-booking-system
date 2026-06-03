@@ -19,6 +19,7 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getCode()).isEqualTo("COMMON_005");
         assertThat(response.getBody().getMessage()).isEqualTo("Service is temporarily busy");
     }
 }

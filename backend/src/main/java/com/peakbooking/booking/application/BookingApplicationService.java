@@ -1,5 +1,16 @@
 package com.peakbooking.booking.application;
 
+import com.peakbooking.booking.application.admission.BookingAdmissionService;
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
+import com.peakbooking.booking.application.dto.PaymentPreparationResult;
+import com.peakbooking.booking.application.dto.ProductSummary;
+import com.peakbooking.booking.application.localqueue.LocalQueueSubmission;
+import com.peakbooking.booking.application.localqueue.LocalWaitingRoom;
+import com.peakbooking.booking.application.support.BookingDbWriteBulkhead;
+import com.peakbooking.booking.application.support.CanonicalRequestHashCalculator;
+import com.peakbooking.booking.application.token.AttemptToken;
+import com.peakbooking.booking.application.token.AttemptTokenService;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionResult;
@@ -74,7 +85,7 @@ public class BookingApplicationService {
         return doBook(command, false);
     }
 
-    BookingResult processLocalQueued(BookingCommand command) {
+    public BookingResult processLocalQueued(BookingCommand command) {
         return doBook(command, true);
     }
 
@@ -102,6 +113,8 @@ public class BookingApplicationService {
                 token.attemptId()
         );
 
+        // Redis may already be healthy, but local accepted users should drain first
+        // so a recovery window does not skip the requests we already acknowledged.
         if (!localQueueWorker && localWaitingRoom.shouldPreferLocalQueue()) {
             return enqueueLocal(command, token.attemptId(), requestHash);
         }
@@ -311,6 +324,8 @@ public class BookingApplicationService {
             AdmissionDecision admission,
             BookingResult result
     ) {
+        // Only terminal failures free a Redis active candidate. Unknown/in-progress
+        // payments still own the slot until recovery decides whether to confirm or release.
         if (!"PAYMENT_FAILED".equals(result.businessCode())
                 && !"POINTS_NOT_ENOUGH".equals(result.businessCode())
                 && !"WAITING_EXPIRED".equals(result.businessCode())

@@ -1,6 +1,8 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.localqueue;
 
-record LocalQueuedBooking(
+import com.peakbooking.booking.application.dto.BookingCommand;
+
+public record LocalQueuedBooking(
         BookingCommand command,
         String bookingAttemptId,
         String requestHash,

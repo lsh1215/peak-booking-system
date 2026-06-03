@@ -1,4 +1,4 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.dto;
 
 public record BookingResult(
         int httpStatus,

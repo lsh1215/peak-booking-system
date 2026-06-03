@@ -1,5 +1,7 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.localqueue;
 
+import com.peakbooking.booking.application.dto.BookingCommand;
+import com.peakbooking.booking.application.dto.BookingResult;
 import com.peakbooking.booking.config.BookingProperties;
 import java.time.Duration;
 import java.util.Comparator;
@@ -109,6 +111,8 @@ public class LocalWaitingRoom {
             clearOutageEpisode();
             return false;
         }
+        // After Redis recovers, keep new requests on this local queue briefly
+        // so already accepted users are not leapfrogged by fresh Redis traffic.
         long recoveredAt = recoveredAtNanos.get();
         if (recoveredAt == 0) {
             return true;

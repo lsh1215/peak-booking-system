@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.peakbooking.booking.application.token.AttemptTokenService;
 import com.peakbooking.booking.domain.BookingErrorCode;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import com.peakbooking.common.exception.BusinessException;

@@ -1,4 +1,4 @@
-package com.peakbooking.booking.api.dto;
+package com.peakbooking.booking.api.response;
 
 import com.peakbooking.booking.application.CheckoutApplicationService;
 import java.time.LocalDateTime;

@@ -1,5 +1,7 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.recovery;
 
+import com.peakbooking.booking.application.admission.BookingAdmissionService;
+import com.peakbooking.booking.application.dto.BookingResult;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.PaymentAttemptStatus;
 import com.peakbooking.booking.domain.ReservationStatus;
@@ -99,6 +101,8 @@ public class RecoveryWorkerService {
         boolean releaseAfterDeadline = reservation.unknownInventoryDeadlineAt() != null
                 && !reservation.unknownInventoryDeadlineAt().isAfter(LocalDateTime.now(clock));
         if (releaseAfterDeadline) {
+            // The stock is returned at the internal deadline first; a later PG success
+            // is treated as an external side effect and cancelled through the provider.
             ReservationRecord released = transactionTemplate.execute(status -> {
                 if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     releaseUnknownAfterDeadline(reservation);

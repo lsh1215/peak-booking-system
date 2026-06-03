@@ -1,5 +1,7 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.localqueue;
 
+import com.peakbooking.booking.application.BookingApplicationService;
+import com.peakbooking.booking.application.dto.BookingResult;
 import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.BookingErrorCode;
 import com.peakbooking.common.exception.BusinessException;
@@ -36,7 +38,7 @@ public class LocalQueueConsumer {
         }
     }
 
-    int drainOnce() {
+    public int drainOnce() {
         int processed = 0;
         int batchSize = Math.max(1, properties.localQueue().workerBatchSize());
         for (int i = 0; i < batchSize; i++) {
@@ -86,6 +88,8 @@ public class LocalQueueConsumer {
 
     private void requeueOrComplete(LocalQueuedBooking queued) {
         long now = System.nanoTime();
+        // Transient DB pressure should not erase a 202-accepted queue entry.
+        // Retry within a bounded age/count budget, then expose a retryable status.
         if (!canRetry(queued, now)) {
             waitingRoom.complete(queued.bookingAttemptId(), unavailable(queued.bookingAttemptId()));
             return;

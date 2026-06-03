@@ -1,4 +1,4 @@
-package com.peakbooking.booking.application;
+package com.peakbooking.booking.application.admission;
 
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.GateMode;
