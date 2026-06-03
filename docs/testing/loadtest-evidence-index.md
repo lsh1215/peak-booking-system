@@ -8,13 +8,15 @@
 |---|---|
 | 작성 날짜 | 2026-06-03 |
 | 대상 브랜치/커밋 | `codex/local-redis-fallback-queue` / `a6692e1` |
-| 테스트 환경 | gcloud GCE k3s 6 nodes, booking-service 2 replicas, MySQL, Redis Sentinel/replicas, Traefik ingress |
+| 테스트 환경 | GCP `asia-northeast3-a`, GCE 6 nodes, all `e2-standard-2` |
+| 하드웨어 스펙 | node당 2 vCPU / 8 GiB RAM, 총 12 vCPU / 48 GiB RAM |
+| 노드 배치 | control-plane/Traefik 1, WAS 2, MySQL 1, Redis 1, LGTM 1 |
 | 비교 대상 | v1 기존 결과 vs local queue fallback 수정 후 결과 |
 
 ## 요약 결론
 
 - V1 보관 결과(`loadtest-results/V1/`)는 정합성은 대체로 지켰지만 Redis down 성능, mixed 판매 수렴, shared DB + Redis down 1000rps에서 실패/위험이 있었다.
-- V2 최신 backend rerun(`loadtest-results/V2/latest-backend-rerun/`) 기준 k6 threshold는 10개 시나리오 모두 PASS.
+- V2 최신 backend rerun(`loadtest-results/V2/LATEST_BACKEND_RERUN.md`, 증거 `loadtest-results/V2/logs/latest-backend-rerun/`) 기준 k6 threshold는 10개 시나리오 모두 PASS.
 - hard correctness 기준인 confirmed/payment_unknown 합계는 모든 DB snapshot에서 stock `10` 이하.
 - `payment-failure`는 confirmed `0`, `pg-timeout`은 payment_unknown `10`으로 기대 상태를 만족.
 - Redis master pod 삭제 중 부하는 `dropped_iterations=25`가 있었지만 redis-down 시나리오 허용치 안에서 PASS했고, 테스트 후 Redis HA는 master 1 + replicas 2 + Sentinel 3 정상 인식 상태로 복구 확인.
@@ -45,8 +47,8 @@
 
 | 구분 | 파일/디렉토리 | 포함 내용 |
 |---|---|---|
-| v1 기존 결과 | `loadtest-results/V1/` | `LOADTEST_ANALYSIS.md`, `SUITE_SUMMARY*.tsv`, `*-summary.json`, `*-inventory.txt`, `*-cluster.txt`, `*.log` |
-| 수정 후 결과 | `loadtest-results/V2/latest-backend-rerun/` | `README.md`, `summary.tsv`, `*-summary.json`, `*-k6.out`, `*-db-snapshot.txt`, `redis-down-injection.txt` |
+| v1 기존 결과 | `loadtest-results/V1/` | `LOADTEST_ANALYSIS.md`, `logs/SUITE_SUMMARY*.tsv`, `logs/*-summary.json`, `logs/*-inventory.txt`, `logs/*-cluster.txt`, `logs/*.log` |
+| 수정 후 결과 | `loadtest-results/V2/` | `LATEST_BACKEND_RERUN.md`, `logs/latest-backend-rerun/summary.tsv`, `logs/latest-backend-rerun/*-summary.json`, `logs/latest-backend-rerun/*-k6.out`, `logs/latest-backend-rerun/*-db-snapshot.txt`, `logs/latest-backend-rerun/redis-down-injection.txt` |
 
 ## DB Snapshot
 
@@ -88,10 +90,11 @@
 |---|---|
 | 대상 브랜치/커밋 | `codex/local-redis-fallback-queue` / `a6692e1` |
 | backend 작업트리 diff | 없음 |
-| 테스트 환경 | gcloud GCE k3s 6 nodes, booking-service 2 replicas, MySQL, Redis Sentinel/replicas, Traefik ingress |
-| 대상 URL | `http://34.64.61.68` |
+| 테스트 환경 | GCP `asia-northeast3-a`, GCE 6 nodes, all `e2-standard-2` |
+| 하드웨어 스펙 | node당 2 vCPU / 8 GiB RAM, 총 12 vCPU / 48 GiB RAM |
+| 노드 배치 | control-plane/Traefik 1, WAS 2, MySQL 1, Redis 1, LGTM 1 |
 | 배포 이미지 | `peak-booking/backend:loadtest-20260603-210017` |
-| 원시 결과 | `loadtest-results/V2/latest-backend-rerun/` |
+| 원시 결과 | 요약 `loadtest-results/V2/LATEST_BACKEND_RERUN.md`, 증거 `loadtest-results/V2/logs/latest-backend-rerun/` |
 
 | 시나리오 | Rate / Duration | k6 threshold | DB 최종 snapshot | 판정 |
 |---|---:|---|---|---|

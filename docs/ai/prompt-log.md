@@ -232,6 +232,17 @@ AI 사용 의도:
 - Redis HA, queue, DB fallback을 best-practice 관점에서 재평가
 - 추가 인프라 선택을 비용 대비 효과로 설명할 근거 확보
 
+### 2026-06-03 — WAS-local in-memory queue trade-off 수용
+
+Cleaned prompt:
+
+> Redis 장애 중 Kafka나 MQ를 추가하지 않고 WAS-local bounded in-memory queue를 쓰는 방안을 검토하고 싶다. 이 방식은 전역 FIFO와 crash durability가 약하고, Redis 복구 후 local queue drain-grace 같은 운영 정책이 필요하다는 단점이 있다. 그래도 추가 인프라 비용 없이 DB를 보호하면서 사용자에게 202 대기 응답을 줄 수 있다면, 공정성을 일부 포기하고 서비스 연속성을 택하는 것이 비즈니스적으로 맞는지 판단해줘.
+
+AI 사용 의도:
+
+- Kafka/MQ durable queue 대비 WAS-local queue의 비용, 운영 복잡도, 공정성, 내구성 trade-off 비교
+- 단점을 모르고 선택한 것이 아니라, 비용 대비 효과와 DB 보호를 우선해 local queue fallback을 수용했다는 근거 확보
+
 ### 2026-06-03 — 결제 요구사항 코드 리뷰
 
 Cleaned prompt:
