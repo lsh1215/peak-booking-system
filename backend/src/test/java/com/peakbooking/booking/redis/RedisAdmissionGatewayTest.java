@@ -77,6 +77,29 @@ class RedisAdmissionGatewayTest {
     }
 
     @Test
+    void should_include_new_candidate_metadata_when_replication_is_not_confirmed() throws Exception {
+        RedisConnection connection = mock(RedisConnection.class);
+        nativeCommands(connection, 0L);
+        StringRedisTemplate redisTemplate = redisTemplate(connection);
+        when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
+                .thenReturn(List.of(bytes("ACTIVE_NEW"), bytes("7"), bytes("7")));
+        RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
+
+        assertThatThrownBy(() -> gateway.tryAdmit(1, 2, 101, 30))
+                .isInstanceOfSatisfying(
+                        RedisAdmissionGateway.ReplicationNotConfirmedException.class,
+                        exception -> {
+                            assertThat(exception.hasCandidate()).isTrue();
+                            assertThat(exception.productId()).isEqualTo(1);
+                            assertThat(exception.saleEventId()).isEqualTo(2);
+                            assertThat(exception.userId()).isEqualTo(101);
+                            assertThat(exception.redisSeq()).isEqualTo(7);
+                            assertThat(exception.newlyCreated()).isTrue();
+                        }
+                );
+    }
+
+    @Test
     void should_tag_wait_timeout_as_replication_not_confirmed() throws Exception {
         RedisConnection connection = mock(RedisConnection.class);
         nativeCommandsFailure(connection, new QueryTimeoutException("wait timed out"));

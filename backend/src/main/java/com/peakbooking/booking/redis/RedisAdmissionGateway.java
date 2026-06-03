@@ -109,9 +109,22 @@ public class RedisAdmissionGateway {
                 try {
                     waitForReplicas(connection);
                 } catch (ReplicationNotConfirmedException replicationFailure) {
-                    throw replicationFailure;
+                    throw replicationFailure.withCandidate(
+                            productId,
+                            saleEventId,
+                            userId,
+                            Long.parseLong(stringValue(result.get(1))),
+                            true
+                    );
                 } catch (RuntimeException waitFailure) {
-                    throw new ReplicationNotConfirmedException(waitReplicas, -1, waitFailure);
+                    throw new ReplicationNotConfirmedException(waitReplicas, -1, waitFailure)
+                            .withCandidate(
+                                    productId,
+                                    saleEventId,
+                                    userId,
+                                    Long.parseLong(stringValue(result.get(1))),
+                                    true
+                            );
                 }
             }
             return result;
@@ -269,8 +282,16 @@ public class RedisAdmissionGateway {
 
     public static final class ReplicationNotConfirmedException extends DataAccessResourceFailureException {
 
+        private final long productId;
+        private final long saleEventId;
+        private final long userId;
+        private final long redisSeq;
+        private final long requiredReplicas;
+        private final long acknowledgedReplicas;
+        private final boolean newlyCreated;
+
         public ReplicationNotConfirmedException(long requiredReplicas, long acknowledgedReplicas) {
-            super(message(requiredReplicas, acknowledgedReplicas));
+            this(requiredReplicas, acknowledgedReplicas, 0, 0, 0, 0, false, null);
         }
 
         public ReplicationNotConfirmedException(
@@ -278,7 +299,78 @@ public class RedisAdmissionGateway {
                 long acknowledgedReplicas,
                 Throwable cause
         ) {
+            this(requiredReplicas, acknowledgedReplicas, 0, 0, 0, 0, false, cause);
+        }
+
+        private ReplicationNotConfirmedException(
+                long requiredReplicas,
+                long acknowledgedReplicas,
+                long productId,
+                long saleEventId,
+                long userId,
+                long redisSeq,
+                boolean newlyCreated,
+                Throwable cause
+        ) {
             super(message(requiredReplicas, acknowledgedReplicas), cause);
+            this.requiredReplicas = requiredReplicas;
+            this.acknowledgedReplicas = acknowledgedReplicas;
+            this.productId = productId;
+            this.saleEventId = saleEventId;
+            this.userId = userId;
+            this.redisSeq = redisSeq;
+            this.newlyCreated = newlyCreated;
+        }
+
+        public ReplicationNotConfirmedException withCandidate(
+                long productId,
+                long saleEventId,
+                long userId,
+                long redisSeq,
+                boolean newlyCreated
+        ) {
+            return new ReplicationNotConfirmedException(
+                    requiredReplicas(),
+                    acknowledgedReplicas(),
+                    productId,
+                    saleEventId,
+                    userId,
+                    redisSeq,
+                    newlyCreated,
+                    getCause()
+            );
+        }
+
+        public long productId() {
+            return productId;
+        }
+
+        public long saleEventId() {
+            return saleEventId;
+        }
+
+        public long userId() {
+            return userId;
+        }
+
+        public long redisSeq() {
+            return redisSeq;
+        }
+
+        public boolean newlyCreated() {
+            return newlyCreated;
+        }
+
+        public boolean hasCandidate() {
+            return newlyCreated && redisSeq > 0;
+        }
+
+        private long requiredReplicas() {
+            return requiredReplicas;
+        }
+
+        private long acknowledgedReplicas() {
+            return acknowledgedReplicas;
         }
 
         private static String message(long requiredReplicas, long acknowledgedReplicas) {

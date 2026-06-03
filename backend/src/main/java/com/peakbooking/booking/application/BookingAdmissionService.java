@@ -105,7 +105,7 @@ public class BookingAdmissionService {
         try {
             return redisAdmissionWithDurablePersistence(saleEventId, productId, userId, bookingAttemptId);
         } catch (RedisAdmissionFailureException redisFailure) {
-            return pauseForRedisFailover(saleEventId, productId, redisFailure);
+            return pauseForRedisFailover(saleEventId, productId, userId, redisFailure);
         } catch (AdmissionPersistenceUnavailableException persistenceFailure) {
             log.warn(
                     "MySQL admission persistence unavailable after Redis admission; rejecting saleEventId={} productId={} userId={}",
@@ -344,8 +344,10 @@ public class BookingAdmissionService {
     private AdmissionDecision pauseForRedisFailover(
             long saleEventId,
             long productId,
+            long userId,
             RedisAdmissionFailureException redisFailure
     ) {
+        compensateReplicationUnconfirmedCandidateIfNeeded(saleEventId, productId, userId, redisFailure);
         boolean firstLocalPause = rememberGateMode(saleEventId, productId, GateMode.REDIS_FAILOVER_PAUSED);
         boolean persisted = true;
         try {
@@ -385,6 +387,56 @@ public class BookingAdmissionService {
             );
         }
         return AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED);
+    }
+
+    private void compensateReplicationUnconfirmedCandidateIfNeeded(
+            long saleEventId,
+            long productId,
+            long userId,
+            RedisAdmissionFailureException redisFailure
+    ) {
+        if (!(redisFailure.cause() instanceof RedisAdmissionGateway.ReplicationNotConfirmedException replicationFailure)
+                || !replicationFailure.hasCandidate()) {
+            return;
+        }
+        if (replicationFailure.saleEventId() != saleEventId
+                || replicationFailure.productId() != productId
+                || replicationFailure.userId() != userId) {
+            log.warn(
+                    "Redis replication failure candidate metadata did not match request saleEventId={} productId={} userId={} redisSeq={}",
+                    saleEventId,
+                    productId,
+                    userId,
+                    replicationFailure.redisSeq()
+            );
+            return;
+        }
+        try {
+            boolean compensated = redisAdmissionGateway.compensateAdmission(
+                    productId,
+                    saleEventId,
+                    userId,
+                    replicationFailure.redisSeq()
+            );
+            if (!compensated) {
+                log.warn(
+                        "Redis replication failure compensation skipped because candidate changed saleEventId={} productId={} userId={} redisSeq={}",
+                        saleEventId,
+                        productId,
+                        userId,
+                        replicationFailure.redisSeq()
+                );
+            }
+        } catch (RuntimeException compensationFailure) {
+            log.warn(
+                    "Redis replication failure compensation failed; admission remains paused saleEventId={} productId={} userId={} redisSeq={}",
+                    saleEventId,
+                    productId,
+                    userId,
+                    replicationFailure.redisSeq(),
+                    compensationFailure
+            );
+        }
     }
 
     private boolean tryRecoverRedisGate(long saleEventId, long productId) {

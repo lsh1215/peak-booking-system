@@ -398,6 +398,7 @@ sequenceDiagram
 - Redis 장애 대응의 기본 구조는 Redis HA다. self-managed 검증 환경에서는 primary 1대, replica 2대, Sentinel 3대 구성을 목표로 한다. managed Redis를 쓰는 경우에도 primary/replica failover가 있는 HA 상품을 전제로 한다.
 - Redis admission write는 Lua script로 처리하고, 새 admission write에는 짧은 `WAIT 1`을 적용한다.
 - HA 모드 Redis server에는 `min-replicas-to-write 1`, `min-replicas-max-lag 1~2s`를 적용한다.
+- 새 Redis candidate write 이후 `WAIT`가 실패하면 해당 요청은 MySQL admission row를 만들지 않는다. 대신 `ACTIVE_NEW`/`WAITING_NEW`로 반환된 `userId + redisSeq`가 현재 Redis candidate와 일치할 때만 그 신규 candidate를 조건부 보상 삭제한다. 기존 candidate나 Redis admission state 전체는 삭제하지 않는다.
 - `WAIT` timeout, min-replica 조건 불만족, Sentinel failover 감지, Redis command timeout이 발생하면 request thread는 새 admission을 DB fallback으로 직접 우회하지 않는다.
 - failover 중 요청은 작은 WAS-local bounded queue에 offer하고, 성공 시 `202 LOCAL_QUEUE_ACCEPTED`, queue full 또는 장애 episode 수용 예산 초과 시 `LOCAL_QUEUE_FULL + Retry-After`로 응답한다.
 - local queue worker는 fixed-delay/batch-size budget 안에서만 MySQL official admission ledger를 기록한다.

@@ -387,6 +387,65 @@ class BookingAdmissionServiceTest {
     }
 
     @Test
+    void should_compensate_new_redis_candidate_when_replication_is_not_confirmed() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 1, Duration.ofSeconds(2)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new RedisAdmissionGateway.ReplicationNotConfirmedException(1, 0)
+                        .withCandidate(1, 1, 101, 7, true));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway).compensateAdmission(1, 1, 101, 7);
+        verify(transactionService, never()).createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 7L, 30);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_not_compensate_existing_redis_candidate_when_replication_is_not_confirmed() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 1, Duration.ofSeconds(2)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new RedisAdmissionGateway.ReplicationNotConfirmedException(1, 0)
+                        .withCandidate(1, 1, 101, 7, false));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, never()).compensateAdmission(1, 1, 101, 7);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
     void should_pause_when_redis_timeout_without_waiting_for_replication_retry() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);

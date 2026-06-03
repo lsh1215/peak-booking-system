@@ -145,7 +145,7 @@ Recovery policy:
   실패하면 Retry-After window 동안 반복 probe를 억제
 ```
 
-이 구조는 Redis replication이나 WAS local queue가 강한 전역 공정성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL admission row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 로컬 큐도 JVM 메모리이므로 해당 WAS가 crash되면 아직 DB에 남지 않은 queue entry는 유실될 수 있다. 이를 완화하기 위해 `WAIT`, `min-replicas-to-write`, bounded queue, idempotency key, throttled worker를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다.
+이 구조는 Redis replication이나 WAS local queue가 강한 전역 공정성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL admission row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 로컬 큐도 JVM 메모리이므로 해당 WAS가 crash되면 아직 DB에 남지 않은 queue entry는 유실될 수 있다. 이를 완화하기 위해 `WAIT`, `min-replicas-to-write`, bounded queue, idempotency key, throttled worker를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다. `WAIT` 실패로 이번 요청에서 새 Redis candidate가 만들어졌지만 MySQL admission row를 만들지 않는 경우에는 Redis admission state 전체를 삭제하지 않고, `userId + redisSeq`가 일치하는 해당 신규 candidate만 조건부 보상 삭제한다.
 
 따라서 Redis 장애 중에도 판매를 계속하면서 공식 도착 순서까지 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + WAS-local bounded queue + throttled DB admission**이 더 적절하다.
 
