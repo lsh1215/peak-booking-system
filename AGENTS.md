@@ -77,8 +77,8 @@ Multiple Codex sessions may run at the same time.
 
 - Start each task by checking `git status --short`.
 - Avoid editing the same document from two sessions unless the user explicitly coordinates it.
-- Treat `docs/ai/conversation-log.md` and `docs/ai/prompt-log.md` as auto-managed raw logs. Do not hand-edit them unless the task is explicitly log cleanup.
-- The logging hooks serialize append operations with `docs/ai/.ai-log.lock`, but semantic ordering can still interleave across sessions. Use timestamps and session ids when reviewing logs.
+- Treat `docs/ai/conversation-log.md` and `docs/ai/prompt-log.md` as historical raw logs. Auto-append logging is disabled by default; do not hand-edit them unless the task is explicitly log cleanup.
+- If AI logging is intentionally re-enabled, the logging hooks serialize append operations with `docs/ai/.ai-log.lock`, but semantic ordering can still interleave across sessions. Use timestamps and session ids when reviewing logs.
 - If another session changed a file, preserve its work and adapt.
 
 ## Command Contract

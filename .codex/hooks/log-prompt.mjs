@@ -88,6 +88,11 @@ function withFileLock(lockDir, fn) {
 
 function main() {
   try {
+    if (process.env.CODEX_AI_LOGGING_ENABLED !== "1") {
+      process.stdout.write(JSON.stringify({ continue: true }));
+      return;
+    }
+
     const input = readStdin();
     const prompt = (input.prompt || "").trim();
     const sessionId = (input.session_id || input.sessionId || "unknown").slice(0, 8);

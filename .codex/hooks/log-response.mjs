@@ -129,6 +129,11 @@ function getLatestAssistantText(transcriptPath) {
 
 function main() {
   try {
+    if (process.env.CODEX_AI_LOGGING_ENABLED !== "1") {
+      process.stdout.write(JSON.stringify({ continue: true }));
+      return;
+    }
+
     const input = readStdin();
     const transcriptPath = input.transcript_path;
     const sessionId = (input.session_id || input.sessionId || "unknown").slice(0, 8);

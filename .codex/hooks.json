@@ -17,20 +17,6 @@
           {
             "type": "command",
             "command": "node '/Users/leesanghun/My_Project/peak-booking-system/.codex/hooks/skill-injector.mjs'"
-          },
-          {
-            "type": "command",
-            "command": "node '/Users/leesanghun/My_Project/peak-booking-system/.codex/hooks/log-prompt.mjs'"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node '/Users/leesanghun/My_Project/peak-booking-system/.codex/hooks/log-response.mjs'"
           }
         ]
       }
