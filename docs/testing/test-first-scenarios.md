@@ -31,6 +31,7 @@
 - 장시간 soak/endurance test는 `1~5분` 피크 요구에 비해 우선순위가 낮다.
 - 한계를 찾기 위한 destructive stress test는 첫 구현의 필수 pass/fail 기준이 아니다.
 - 실제 PG 연동 테스트는 범위 밖이며, Mock PG의 confirm/query/cancel/webhook-like 흐름으로 대체한다.
+- `mock_pg_scenario`는 local/test/load-test profile에서 장애를 주입하기 위한 테스트 제어값이다. production API 계약에서는 사용자가 결제 결과를 선택하는 field로 노출하면 안 된다.
 
 ## 현재 요구사항에서 나온 핵심 불변식
 
@@ -87,6 +88,8 @@
 | waiting-candidate | 선순위 일부 `PAYMENT_UNKNOWN`, 후순위 후보 대기 | `WAITING_CANDIDATE` 사용자-facing 대기 `<= 60s`, 선순위 release 후 승격은 `db_admission_seq` 순서 |
 | realistic-mixed | duplicate + 명확한 payment failure + 낮은 비율의 PG timeout | DB 기준 `confirmed_count = 10`, hard correctness fail 없음, resource threshold 유지 |
 | adversarial-mixed | Redis failover + WAS 1대 down + 높은 PG timeout + duplicate | hard correctness fail 없음, 무제한 retry/DB collapse 없음. 연속 unknown으로 인한 underfill은 60초 대기 정책의 accepted trade-off인지 별도 판단 |
+
+부하 테스트 원시 결과는 `loadtest-results/`에 로컬 보존하고 Git에는 올리지 않는다. 제출 문서에서는 [부하 테스트 증거 인덱스](./loadtest-evidence-index.md)를 통해 각 주장과 테스트 증거의 연결 상태를 확인한다. Redis master failover k6는 최신 코드 기준으로 다시 실행해 이 인덱스에 연결해야 한다.
 
 ## 쟁점 7 초기 Threshold
 

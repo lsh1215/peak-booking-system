@@ -17,7 +17,7 @@
 
 - AI 출력은 설계 보조 자료이며, 최종 요구사항/설계/테스트 결과의 근거로 단독 사용하지 않는다.
 - 공식 문서 또는 실행 결과로 확인하지 않은 주장은 `Unverified` 또는 `Needs validation`으로 표시한다.
-- 자동 기록되는 `conversation-log.md`와 `prompt-log.md`는 raw working log이며, 공개 제출 전 사람이 검토한다.
+- 자동 기록되는 `conversation-log.md`와 `prompt-log.md`는 세션별 작업 흔적을 남기기 위한 partial/curated log다. 공개 제출 전에는 사람이 민감 정보, 중복, 오래된 판단을 검토한다.
 - 여러 Codex 세션이 동시에 실행될 수 있으므로 로그 훅은 `.ai-log.lock`으로 append를 직렬화한다. 그래도 섹션 순서는 실제 대화 시간과 약간 다를 수 있어 timestamp/session id를 기준으로 검토한다.
 
 ## Review Checklist Before Public Submission

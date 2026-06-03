@@ -1,8 +1,8 @@
 # Peak Booking System Decisions
 
-이 문서는 `00시` 오픈, `10개 한정` 초특가 숙소 상품의 선착순 예약/결제 backend에서 요구사항을 만족하기 위해 내린 **핵심 기술 의사결정**을 기록한다.
+이 문서는 `00시` 오픈, `10개 한정` 초특가 숙소 상품의 선착순 예약/결제 backend에서 요구사항을 만족하기 위해 내린 **핵심 기술 의사결정을** 기록한다.
 
-기술 스택 자체를 단순 나열하는 것은 이 문서의 중심 주제가 아니다. 여기서는 요구사항이 직접 요구하는 **재고 정합성, 공정성, Redis 장애 대응, 멱등성, 결제 실패 처리, 결제 확장성, 과부하 방어 판단**을 다룬다. 라이브러리와 외부 구성요소는 **"어떤 문제를 해결하기 위해 도입했는가"**가 분명한 경우에만 별도 쟁점으로 기록한다.
+기술 스택 자체를 단순 나열하는 것은 이 문서의 중심 주제가 아니다. 여기서는 요구사항이 직접 요구하는 **재고 정합성, 공정성, Redis 장애 대응, 멱등성, 결제 실패 처리, 결제 확장성, 과부하 방어 판단을** 다룬다. 라이브러리와 외부 구성요소는 **"어떤 문제를 해결하기 위해 도입했는가"가** 분명한 경우에만 별도 쟁점으로 기록한다.
 
 ## 목차
 
@@ -41,7 +41,7 @@
 
 ### 왜 그렇게 판단했는지
 
-공정성은 **"누가 실제로 더 빨리 클릭했는가"**가 아니라 **"오픈 이후 유효한 첫 예약 시도가 권위 있는 서버 admission gate에 어떤 순서로 기록되었는가"**로 정의한다.
+공정성은 **"누가 실제로 더 빨리 클릭했는가"가** 아니라 **"오픈 이후 유효한 첫 예약 시도가 권위 있는 서버 admission gate에 어떤 순서로 기록되었는가"로** 정의한다.
 
 최종 채택 구조는 다음과 같다.
 
@@ -97,7 +97,7 @@ WHERE sale_event_id = ?
 
 ### 왜 그렇게 판단했는지
 
-Redis 장애 대응의 핵심은 **"Redis가 죽어도 DB를 무제한으로 때리지 않는다"**와 **"Redis 장애가 공정성 기준을 갈라놓지 않는다"**다.
+Redis 장애 대응의 핵심은 **"Redis가 죽어도 DB를 무제한으로 때리지 않는다"와** **"Redis 장애가 공정성 기준을 갈라놓지 않는다"다**.
 
 최종 채택 구조는 다음과 같다.
 
@@ -134,18 +134,15 @@ Recovery policy:
 
 따라서 Redis 장애 중에도 판매를 절대 멈추지 않고 공식 도착 순서를 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + failover pause가 더 적절하다**.
 
-최근 loadtest 검증에서는 Redis master failover 500 RPS 시나리오에서 half-open probe 억제 적용 후 아래 결과를 얻었다.
+현재 repository에 남기는 증거는 두 층으로 분리한다.
 
-| 항목 | 결과 |
-|---|---:|
-| oversell | 0 |
-| technical failure | 0 |
-| dropped iterations | 0 |
-| 최종 confirmed | 10 |
-| overall p95 | 약 173ms |
-| booking p95 | 약 1.2s |
+| 증거 | 확인 내용 | 현재 상태 |
+|---|---|---|
+| unit/integration test | Redis failover pause, half-open probe, Retry-After 응답, DB fallback 우회 금지를 코드 수준에서 검증 | repository에 포함 |
+| k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 원시 결과는 `loadtest-results/`에 보존하되 Git 추적 제외 |
+| Redis master failover k6 | Sentinel failover 중 fast-fail latency, dropped iteration, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
 
-이 결과는 **"failover 중에도 모든 요청을 처리한다"**가 아니라 **"짧게 통제 거절하고, Redis HA가 회복되면 정상 admission으로 돌아온다"**는 정책을 검증한 것이다.
+따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 처리한다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 DB로 새 admission을 우회하지 않고 짧게 통제 거절하며, Redis가 회복된 뒤에만 half-open probe로 정상 admission을 재개한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
 
 ---
 
@@ -174,7 +171,7 @@ Recovery policy:
 
 ### 왜 그렇게 판단했는지
 
-최종 멱등성 기준은 **서버 발급 `booking_attempt_id`**다. 사용자는 `GET /checkout/{productId}`에서 주문서 정보와 함께 attempt token을 받고, `POST /bookings`에서 같은 token을 사용한다.
+최종 멱등성 기준은 **서버 발급 `booking_attempt_id`다**. 사용자는 `GET /checkout/{productId}`에서 주문서 정보와 함께 attempt token을 받고, `POST /bookings`에서 같은 token을 사용한다.
 
 정책은 다음과 같다.
 
@@ -184,7 +181,7 @@ Recovery policy:
 - 같은 `booking_attempt_id`지만 `request_hash`가 다르면 conflict로 거절한다.
 - in-progress 또는 `PAYMENT_UNKNOWN` replay는 **새 PG confirm을 만들지 않고 현재 상태를 반환한다**.
 - 같은 attempt에서 PG confirm owner는 조건부 상태 전이로 1개 요청만 획득한다.
-- idempotency record retention은 `24h`다. 이 값은 **재고 점유 시간이 아니라 운영 추적, 지연 retry, recovery/webhook 확인 buffer**다.
+- idempotency record retention은 `24h`다. 이 값은 **재고 점유 시간이 아니라 운영 추적, 지연 retry, recovery/webhook 확인 buffer다**.
 
 `request_hash`에 포함하는 필드는 다음이다.
 
@@ -217,6 +214,8 @@ Recovery policy:
 ### 상황
 
 요구사항은 한도 초과 같은 결제 실패 케이스에 대한 대응 로직을 요구한다. 실제 PG 연동은 범위 밖이지만, Mock PG는 실제 PG처럼 승인, 조회, 취소, 상태 변경 이벤트 흐름을 구조적으로 가져야 한다.
+
+`mock_pg_scenario`는 이 흐름을 검증하기 위한 **local/test/load-test profile 전용 장애 주입 값이다**. production API 계약에서는 사용자가 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS` 같은 결제 결과를 선택하는 형태로 노출하면 안 된다. 실제 운영에서는 PG adapter나 테스트 전용 내부 endpoint/header가 같은 역할을 맡아야 한다.
 
 결제 처리에서 가장 위험한 지점은 timeout/응답 유실이다.
 
@@ -267,7 +266,7 @@ Recovery worker 대상은 다음이다.
 | waiting candidate 사용자-facing window | 60s | 후순위 후보가 대기할 수 있는 최대 시간 |
 | payment reconciliation 적극 window | 5분 | 재고 release 이후에도 payment/cancel 상태를 정리하는 운영 window |
 
-이 선택은 PG 취소 수수료, 환불 비용, CS 비용을 accepted compensation cost로 둔다. 요구사항상 더 중요한 것은 **초과판매 방지와 결제 실패/장애 후 재고 누수 방지**다.
+이 선택은 PG 취소 수수료, 환불 비용, CS 비용을 accepted compensation cost로 둔다. 요구사항상 더 중요한 것은 **초과판매 방지와 결제 실패/장애 후 재고 누수 방지다**.
 
 ---
 
@@ -289,7 +288,7 @@ Recovery worker 대상은 다음이다.
 
 ### 왜 그렇게 판단했는지
 
-최종 구조는 결제 요청을 **`PaymentPlan`으로 정규화**하고, **`CombinationPolicy`가 허용/금지 조합을 검증**한 뒤, 수단별 **`PaymentProcessor`가 실행**하는 방식이다.
+최종 구조는 결제 요청을 **`PaymentPlan`으로 정규화하고**, **`CombinationPolicy`가 허용/금지 조합을 검증한** 뒤, 수단별 **`PaymentProcessor`가 실행하는** 방식이다.
 
 책임 분리는 다음과 같다.
 
@@ -332,7 +331,9 @@ Recovery worker 대상은 다음이다.
 
 ### 왜 그렇게 판단했는지
 
-Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역할을 한다. 여기서 route-level rate limit은 **WAS가 터지는 것을 막는 1차 방어 수단**이다. 하지만 **선착순 공정성이나 사용자 중복 방지는 Traefik에서 판단하지 않는다**.
+Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역할을 한다. 여기서 route-level rate limit은 **WAS가 터지는 것을 막는 1차 방어 수단이다**.
+
+하지만 **선착순 공정성이나 사용자 중복 방지는 Traefik에서 판단하지 않는다**.
 
 최종 정책은 다음과 같다.
 
@@ -341,6 +342,8 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 - Traefik은 user별 중복 방지나 공정성 원장이 아니다.
 - 사용자 중복 방지는 app/MySQL의 `(sale_event_id, product_id, user_id)` unique와 idempotency policy가 담당한다.
 - DB write, PG confirm, recovery worker는 별도 concurrency budget을 둔다.
+- DB write bulkhead는 **Redis admission을 통과한 후보를 MySQL official admission ledger에 저장할 수 있는지를** 보호하는 좁은 구간에 둔다.
+- 이 순서는 "Redis가 모든 요청의 최종 순서를 먼저 정한다"는 뜻이 아니다. **DB에 durable admission row를 남길 수 없는 요청은 Redis candidate sequence도 소비하지 않게 하려는 trade-off다**.
 - **DB fallback admission은 Redis HA 구조로 전환하면서 기본 경로에서 제거한다**.
 - **Redis failover 중 새 admission은 DB로 우회하지 않고 controlled rejection한다**.
 
@@ -352,7 +355,7 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 
 ### 상황
 
-문서 설계만으로는 Redis HA, 결제 unknown, 멱등성, DB 보호가 실제로 동작한다고 주장할 수 없다. 특히 이 시스템은 **"정상 부하에서 빠르다"**보다 **"장애와 spike가 겹쳐도 초과판매/중복결제/DB collapse가 없다"**가 더 중요하다.
+문서 설계만으로는 Redis HA, 결제 unknown, 멱등성, DB 보호가 실제로 동작한다고 주장할 수 없다. 특히 이 시스템은 **"정상 부하에서 빠르다"보다** **"장애와 spike가 겹쳐도 초과판매/중복결제/DB collapse가 없다"가** 더 중요하다.
 
 ### 선택지
 
@@ -371,6 +374,8 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 3. Integration/acceptance: MySQL, Redis, Mock PG를 포함한 예약/결제 흐름.
 4. k6 smoke/load/resilience: 정상, Redis failover, WAS 1대 down, PG timeout, duplicate, mixed.
 5. LGTM/Grafana: DB pressure, Redis pressure, app latency, Hikari, JVM, gateway shedding 확인.
+
+부하 테스트 원시 결과는 크고 환경 의존적이므로 `loadtest-results/` 아래에 로컬 보존하고 Git에는 올리지 않는다. 대신 제출 문서에는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 두어 **어떤 주장을 어떤 테스트/파일/상태가 뒷받침하는지를** 추적한다.
 
 Hard correctness fail은 아래와 같다.
 
@@ -391,7 +396,7 @@ Hard correctness fail은 아래와 같다.
 
 요구사항은 동작 가능한 소스 코드와 실행 방법을 요구한다. 동시에 추가 인프라를 사용했다면 이유와 비용 대비 효과를 설명해야 한다.
 
-이 시스템은 `10개` 한정 상품을 다루므로, 기능 구현만 보면 단순 CRUD처럼 보일 수 있다. 하지만 실제 문제는 **중복 클릭, 결제 timeout, Redis 장애, 피크 트래픽, DB 압박이 겹칠 때 정합성을 지키는 것**이다. 따라서 라이브러리와 외부 구성요소는 **"있으면 좋아 보이는 기술"이 아니라 "요구사항의 특정 위험을 낮추는 도구"일 때만 도입한다**.
+이 시스템은 `10개` 한정 상품을 다루므로, 기능 구현만 보면 단순 CRUD처럼 보일 수 있다. 하지만 실제 문제는 **중복 클릭, 결제 timeout, Redis 장애, 피크 트래픽, DB 압박이 겹칠 때 정합성을 지키는 것이다**. 따라서 라이브러리와 외부 구성요소는 **"있으면 좋아 보이는 기술"이 아니라 "요구사항의 특정 위험을 낮추는 도구"일 때만 도입한다**.
 
 ### 선택지
 

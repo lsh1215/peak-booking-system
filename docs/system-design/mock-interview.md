@@ -33,6 +33,8 @@
 
 정상 경로에서는 Traefik이 1차로 spike를 줄이고, Redis HA admission gate가 후보를 빠르게 추린다. MySQL은 공식 admission ledger와 최종 재고 guard를 담당한다. Redis failover 중에는 새 admission을 DB로 우회하지 않고 짧게 pause한다. 결제는 `HELD`를 먼저 durable하게 남긴 뒤 DB transaction 밖에서 PG를 호출하고, timeout/unknown은 bounded recovery로 정리한다.
 
+단, Redis master failover의 최종 k6 성능 수치는 원시 결과 파일과 함께 다시 남겨야 한다. 현재 repository가 확실하게 담고 있는 것은 Redis failover pause/half-open의 코드 테스트와, 정상 peak/중복/PG timeout/WAS 1대 down/Redis hard-down/shared DB pressure의 로컬 k6 요약이다. 증거 연결 상태는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 기준으로 본다.
+
 ```mermaid
 flowchart LR
     Client[Client] --> Traefik[Traefik<br/>LB + route-level rate limit]
@@ -129,6 +131,7 @@ sequenceDiagram
 - pause TTL 이후 half-open probe를 수행한다.
 - probe는 Redis write + WAIT가 성공해야 통과한다.
 - probe 성공 후에만 gate를 `REDIS`로 복구한다.
+- DB write budget은 Redis sequence를 먼저 소비한 뒤 DB 저장에 실패하는 후보 손실을 막기 위해 admission persistence 구간에 둔다. 공식 순서는 Redis sequence가 아니라 MySQL `db_admission_seq`다.
 
 이 구조는 Redis 장애 중에도 모든 요청을 계속 판매 처리하겠다는 의미가 아니다. Redis HA로 장애 시간을 줄이고, failover 중에는 DB 폭주와 공정성 기준 분리를 막기 위해 짧게 통제 거절한다는 의미다.
 
@@ -219,13 +222,15 @@ Traefik은 2개 이상 WAS replica 앞의 LB/API gateway이자 1차 rate limiter
 
 ## 5. 남은 검증 포인트
 
-- Redis failover 중 pause가 fast-fail로 동작하고, latency가 긴 timeout으로 늘어나지 않는지.
-- half-open probe가 Redis write + WAIT 성공 후에만 admission을 재개하는지.
-- Redis failover 중 MySQL DB fallback으로 새 admission이 우회하지 않는지.
-- duplicate request가 PG confirm owner를 2개 만들지 않는지.
-- stale `HELD`와 `PAYMENT_UNKNOWN`이 `30s` 안에 release되는지.
-- release 이후 늦은 PG success가 reservation을 되살리지 않고 cancel/refund/reconciliation으로 흐르는지.
-- `WAITING_CANDIDATE`가 `60s`를 초과해 사용자-facing 대기 상태로 남지 않는지.
+| 검증 포인트 | 현재 상태 |
+|---|---|
+| Redis failover 중 MySQL DB fallback으로 새 admission이 우회하지 않는지 | unit/controller test로 확인. Redis master failover k6 원시 결과는 재실측 필요 |
+| half-open probe가 Redis write + WAIT 성공 후에만 admission을 재개하는지 | unit test로 확인 |
+| Redis failover pause가 fast-fail latency 기준을 만족하는지 | 최신 k6 증거 파일 필요 |
+| duplicate request가 PG confirm owner를 2개 만들지 않는지 | integration/idempotency test로 확인 |
+| stale `HELD`와 `PAYMENT_UNKNOWN`이 `30s` 안에 release되는지 | recovery/integration test로 확인 |
+| release 이후 늦은 PG success가 reservation을 되살리지 않고 cancel/refund/reconciliation으로 흐르는지 | integration test로 확인 |
+| `WAITING_CANDIDATE`가 `60s`를 초과해 사용자-facing 대기 상태로 남지 않는지 | 정책 수용. mixed k6 재실측 필요 |
 
 ---
 
