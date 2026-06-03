@@ -7,10 +7,6 @@
 | `ai/conversation-log.md` | Auto-appended AI conversation log. Review before publishing. |
 | `ai/prompt-log.md` | Auto-appended raw user prompts only. Review before publishing. |
 | `decisions/DECISIONS.md` | Major technical choices, alternatives, rationale, and rejected options. |
-| `research/source-backed-research-note.md` | Redis/MySQL/PostgreSQL/idempotency/resilience claims with sources. |
 | `system-design/mock-interview.md` | Working mock-interview style system design document. |
 | `system-design/sdd.md` | Working formal Software Design Document. |
-| `system-design/next-session-prompt.md` | Copy-paste prompt for resuming design decision discussion in the next session. |
-| `testing/test-first-scenarios.md` | Failure/race/duplicate scenarios to pin as tests before implementation. |
-| `testing/bootstrap-verification.md` | Evidence for backend bootstrap, local Docker/LGTM stack, k6 smoke test, and Kubernetes manifest rendering. |
-| `reviews/adversarial-review.md` | Critic-mode findings and closure status. |
+| `testing/loadtest-evidence-index.md` | Single form for comparing existing v1 load-test results with the local queue fallback revision results. |

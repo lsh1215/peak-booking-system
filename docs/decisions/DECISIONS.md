@@ -79,12 +79,12 @@ WHERE sale_event_id = ?
 
 요구사항은 Redis 장애 시 fallback 전략과 근거를 요구한다. 동시에 이 시스템은 `500~1000 TPS` 피크에서 기존 서비스 DB를 터뜨리면 안 된다.
 
-처음에는 Redis 장애 시 bounded DB admission fallback을 고려했다. 하지만 단일 Redis를 완전히 내린 상태에서 `500 RPS` 이상을 DB fallback으로 받아보면 두 문제가 생긴다.
+처음에는 Redis 장애 시 bounded DB admission fallback을 고려했다. 하지만 단일 Redis를 완전히 내린 상태에서 `500 RPS` 이상을 DB fallback으로 바로 받아보면 두 문제가 생긴다.
 
 - DB fallback concurrency를 작게 잡으면 대부분 요청이 거절되어 "Redis 장애 중에도 제한적으로 판매한다"는 목표를 달성하기 어렵다.
 - DB fallback concurrency를 크게 잡으면 공유 DB의 connection pool, lock wait, latency가 급격히 나빠질 수 있다.
 
-따라서 Redis 장애 상황에서 **DB를 새 admission 원장으로 무리하게 우회하는 방식은 ROI가 낮다**.
+따라서 Redis 장애 상황에서 **request thread가 DB를 새 admission 원장으로 직접 때리는 방식은 ROI가 낮다**. 다만 완전 fail-fast만 선택하면 판매 UX가 너무 급격히 나빠지고, Redis failover 동안 유입된 사용자가 모두 이탈한다. 현재 판단은 공정성을 일부 포기하더라도 시스템 전체를 살리고 제한적인 비즈니스 연속성을 확보하는 쪽으로 바뀌었다.
 
 ### 선택지
 
@@ -92,12 +92,13 @@ WHERE sale_event_id = ?
 |---|---|---|---|
 | Redis 장애 시 fail-closed | 가장 단순하고 초과판매 위험이 낮다 | Redis 장애 동안 판매가 멈춘다 | 단독 기본안으로는 부족 |
 | Redis 장애 시 bounded DB fallback | Redis down 중에도 일부 판매 가능성이 있다 | 피크에서 DB 보호와 공정성을 동시에 만족시키기 어렵고, DB가 기존 서비스와 공유되면 위험하다 | 기존 후보에서 거절 |
-| Redis HA + failover pause | Redis 단일 장애 시간을 줄이고, failover 중 DB 폭주를 막으며 공정성 기준을 갈라놓지 않는다 | failover 중 아주 짧은 판매 pause가 발생한다 | 수용 |
+| Redis HA + failover pause | Redis 단일 장애 시간을 줄이고, failover 중 DB 폭주를 막으며 공정성 기준을 갈라놓지 않는다 | failover 중 판매가 멈춘다 | 이전 기본안, 현재는 보조 회복 구조 |
+| WAS-local bounded in-memory queue | Kafka/MQ 없이 장애 중 요청을 202로 받아 UX를 유지하고, worker가 DB write 속도를 제한한다 | replica 간 전역 FIFO가 아니며 WAS crash 시 해당 로컬 큐 요청이 유실될 수 있다 | 현재 fallback으로 수용 |
 | Durable admission log 추가 | Redis 장애 중에도 공식 도착 순서를 계속 보존할 수 있다 | Queue/Kafka/PubSub HA, consumer, 운영 복잡도가 크게 늘어난다 | 현재 범위에서는 보류 |
 
 ### 왜 그렇게 판단했는지
 
-Redis 장애 대응의 핵심은 **"Redis가 죽어도 DB를 무제한으로 때리지 않는다"와** **"Redis 장애가 공정성 기준을 갈라놓지 않는다"다**.
+Redis 장애 대응의 핵심은 **"Redis가 죽어도 DB를 무제한으로 때리지 않는다"와** **"장애 중 유입된 요청을 bounded queue와 throttled worker로만 DB에 흘린다"다**. 기존의 전역 공정성 기준은 약해진다. Redis 장애 중에는 WAS replica별 로컬 큐 순서가 사용자 경험상 대기 순서가 되며, 전역 FIFO는 보장하지 않는다.
 
 최종 채택 구조는 다음과 같다.
 
@@ -120,29 +121,40 @@ Failure policy:
   WAIT timeout
   Sentinel failover 감지
   Redis command timeout
-  -> 새 admission은 ADMISSION_TEMPORARILY_UNAVAILABLE + Retry-After
-  -> DB로 새 후보를 뽑지 않음
+  -> request thread는 DB admission을 직접 수행하지 않음
+  -> bounded WAS-local queue에 offer
+  -> 성공 시 202 LOCAL_QUEUE_ACCEPTED + booking_attempt_id
+  -> queue full 시 429 LOCAL_QUEUE_FULL + Retry-After
+
+Local queue policy:
+  ArrayBlockingQueue(capacity 예: WAS당 2,000)
+  booking_attempt_id + request_hash로 로컬 dedupe/conflict 방지
+  worker는 fixedDelay/batchSize로 DB admission을 throttling
+  DB admission은 LOCAL_QUEUE gate_mode로 MySQL official ledger에 기록
+  confirmed 수는 MySQL inventory guard로 <= 10 보장
+  client는 GET /bookings/status/{booking_attempt_id} 또는 POST replay로 polling
 
 Recovery policy:
   pause TTL 이후 half-open probe 수행
   probe는 Redis write + WAIT가 성공해야 통과
-  성공하면 gate를 REDIS로 복구
+  probe가 성공해도 local queue active_count가 0이 될 때까지 새 외부 요청은 로컬 큐에 유지
+  local queue drain-grace(예: 30s)가 지나면 남은 queue는 worker가 계속 처리하고 새 요청은 REDIS 경로 재개 가능
   실패하면 Retry-After window 동안 반복 probe를 억제
 ```
 
-이 구조는 Redis replication이 강한 일관성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL admission row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 이를 완화하기 위해 `WAIT`와 `min-replicas-to-write`를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다.
+이 구조는 Redis replication이나 WAS local queue가 강한 전역 공정성을 보장한다고 가정하지 않는다. Redis primary가 sequence를 부여했지만 MySQL admission row 저장 전에 죽는 짧은 구간은 이론적으로 남는다. 로컬 큐도 JVM 메모리이므로 해당 WAS가 crash되면 아직 DB에 남지 않은 queue entry는 유실될 수 있다. 이를 완화하기 위해 `WAIT`, `min-replicas-to-write`, bounded queue, idempotency key, throttled worker를 사용하지만, 이것이 durable log와 같은 보장을 주지는 않는다.
 
-따라서 Redis 장애 중에도 판매를 절대 멈추지 않고 공식 도착 순서를 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + failover pause가 더 적절하다**.
+따라서 Redis 장애 중에도 판매를 계속하면서 공식 도착 순서까지 보존해야 하는 요구가 추가되면, Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다. 현재 요구사항과 비용 대비 효과를 기준으로는 **Redis HA + WAS-local bounded queue + throttled DB admission**이 더 적절하다.
 
 현재 repository에 남기는 증거는 두 층으로 분리한다.
 
 | 증거 | 확인 내용 | 현재 상태 |
 |---|---|---|
-| unit/integration test | Redis failover pause, half-open probe, Retry-After 응답, DB fallback 우회 금지를 코드 수준에서 검증 | repository에 포함 |
+| unit/integration test | Redis failover pause, half-open probe, local queue bounded/dedupe/drain-grace, worker batch 제한, DB fallback 무제한 우회 금지를 코드 수준에서 검증 | repository에 포함 |
 | k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 원시 결과는 `loadtest-results/`에 보존하되 Git 추적 제외 |
-| Redis master failover k6 | Sentinel failover 중 fast-fail latency, dropped iteration, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
+| Redis master failover k6 | Sentinel failover 중 local queue accepted/full 비율, drain 시간, DB pressure, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
 
-따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 처리한다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 DB로 새 admission을 우회하지 않고 짧게 통제 거절하며, Redis가 회복된 뒤에만 half-open probe로 정상 admission을 재개한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
+따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 성공시킨다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 request thread의 직접 DB fallback을 막으며, bounded local queue와 throttled worker로만 제한적으로 판매를 이어가고, Redis 회복 후에도 local queue가 비거나 drain-grace가 지날 때까지 새 요청을 로컬 큐에 유지한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
 
 ---
 
@@ -402,8 +414,9 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 - DB write, PG confirm, recovery worker는 별도 concurrency budget을 둔다.
 - DB write bulkhead는 **Redis admission을 통과한 후보를 MySQL official admission ledger에 저장할 수 있는지를** 보호하는 좁은 구간에 둔다.
 - 이 순서는 "Redis가 모든 요청의 최종 순서를 먼저 정한다"는 뜻이 아니다. **DB에 durable admission row를 남길 수 없는 요청은 Redis candidate sequence도 소비하지 않게 하려는 trade-off다**.
-- **DB fallback admission은 Redis HA 구조로 전환하면서 기본 경로에서 제거한다**.
-- **Redis failover 중 새 admission은 DB로 우회하지 않고 controlled rejection한다**.
+- **request thread의 직접 DB fallback admission은 기본 경로에서 제거한다**.
+- **Redis failover 중 새 admission은 WAS-local bounded queue로만 받고, throttled worker가 DB admission을 수행한다**.
+- **Redis가 복구되어도 local queue active_count가 0이 되거나 drain-grace가 지날 때까지 새 요청은 로컬 큐에 유지한다**.
 
 초기 수치는 Little's Law, HikariCP pool sizing guidance, Mock PG normal delay, k6/LGTM 실측으로 산정하고 보정한다. 단, **초과판매 금지, 중복 결제 금지, 재고 불변식 같은 hard correctness 기준은 수치 보정으로 완화하지 않는다**.
 
@@ -473,7 +486,8 @@ Hard correctness fail은 아래와 같다.
 | Spring Boot 3.x | Java 21 기반 REST API, validation, scheduling, metrics를 빠르게 구성한다 | 직접 HTTP 서버 구현 | application service boundary에 transaction을 두고, controller는 요청/응답 변환에 집중한다 |
 | Spring Data JPA / Hibernate | domain entity와 repository를 명확히 두고 MySQL schema와 매핑한다 | JDBC string query 중심 구현 | 단, hot-path atomic update와 lease claim은 repository query로 명확히 표현한다 |
 | MySQL 8 | 최종 재고 원장, admission ledger, idempotency, payment/recovery state를 durable하게 저장한다 | Redis를 최종 원장으로 사용 | `reservation` + atomic counter + DB constraint로 `<= 10`을 보장한다 |
-| Redis HA | 정상 경로 admission을 빠르게 처리하고 Redis 단일 장애 시간을 줄인다 | 단일 Redis 또는 DB fallback only | Lua admission + `WAIT` + Sentinel failover + failover pause를 사용한다 |
+| Redis HA | 정상 경로 admission을 빠르게 처리하고 Redis 단일 장애 시간을 줄인다 | 단일 Redis 또는 DB fallback only | Lua admission + `WAIT` + Sentinel failover + half-open probe를 사용한다 |
+| WAS-local queue | Redis 장애 중 request thread의 DB 폭주 없이 제한적 판매 연속성을 제공한다 | Kafka/MQ durable queue | bounded in-memory queue + worker throttling + polling status를 사용한다 |
 | Traefik | k3s 환경에서 2개 이상 WAS 앞단의 LB와 1차 route-level shedding을 담당한다 | app 내부 방어만 사용 | gateway는 WAS 보호만 담당하고, 공정성/중복 방지는 app/DB가 담당한다 |
 | k6 | 피크, 장애, 중복 클릭, mixed 시나리오를 재현한다 | 수동 curl 또는 smoke test만 사용 | 정상/Redis failover/WAS down/PG timeout/mixed를 분리해 검증한다 |
 | LGTM + Micrometer | p95/p99, Hikari pressure, Redis 상태, JVM 지표를 관측한다 | 로그만 확인 | 성능 실패와 정합성 실패를 분리해서 판단한다 |
@@ -484,4 +498,4 @@ Hard correctness fail은 아래와 같다.
 - **Redis HA는 Redis 장애 요구사항을 직접 다루므로 수용한다**.
 - Traefik은 `2+` stateless WAS 앞단의 LB가 필요하고, WAS 보호용 rate limit을 제공하므로 수용한다.
 - LGTM과 k6는 설계가 실제로 버티는지 증명하는 검증 도구이므로 수용한다.
-- Kafka/Queue는 Redis 장애 중에도 판매를 계속해야 하는 더 강한 요구가 생기면 검토한다. 현재는 **Redis HA + failover pause가 비용 대비 효과가 더 크다**.
+- Kafka/Queue는 Redis 장애 중에도 전역 FIFO와 durable 대기열을 보장해야 하는 더 강한 요구가 생기면 검토한다. 현재는 **Redis HA + WAS-local bounded queue**가 비용 대비 효과가 더 크다.

@@ -238,7 +238,5 @@ Traefik은 2개 이상 WAS replica 앞의 LB/API gateway이자 1차 rate limiter
 
 - [Requirements](../requirements.md)
 - [Decision log](../decisions/DECISIONS.md)
-- [Redis admission design](redis-admission-design.md)
 - [Software Design Document](sdd.md)
-- [Test-first scenarios](../testing/test-first-scenarios.md)
-- [Source-backed research note](../research/source-backed-research-note.md)
+- [Load-test result summary form](../testing/loadtest-evidence-index.md)
