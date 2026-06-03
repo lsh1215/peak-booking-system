@@ -215,7 +215,7 @@ Recovery policy:
 
 요구사항은 한도 초과 같은 결제 실패 케이스에 대한 대응 로직을 요구한다. 실제 PG 연동은 범위 밖이지만, Mock PG는 실제 PG처럼 승인, 조회, 취소, 상태 변경 이벤트 흐름을 구조적으로 가져야 한다.
 
-`mock_pg_scenario`는 이 흐름을 검증하기 위한 **local/test/load-test profile 전용 장애 주입 값이다**. production API 계약에서는 사용자가 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS` 같은 결제 결과를 선택하는 형태로 노출하면 안 된다. 실제 운영에서는 PG adapter나 테스트 전용 내부 endpoint/header가 같은 역할을 맡아야 한다.
+`mock_pg_scenario`는 이 흐름을 검증하기 위한 local/test/load-test profile 전용 장애 주입 값이다. production API 계약에서는 사용자가 `SUCCESS`, `FAILURE`, `TIMEOUT`, `LATE_SUCCESS` 같은 결제 결과를 선택하는 형태로 노출하면 안 된다. 실제 운영에서는 PG adapter나 테스트 전용 내부 endpoint/header가 같은 역할을 맡아야 한다.
 
 결제 처리에서 가장 위험한 지점은 timeout/응답 유실이다.
 
@@ -236,19 +236,75 @@ Recovery policy:
 
 ### 왜 그렇게 판단했는지
 
-최종 결제 실패/unknown 정책은 다음이다.
+#### 결론
 
-1. MySQL transaction으로 `reservation.HELD`를 먼저 만든다.
-2. **DB transaction 밖에서 Mock PG `confirm`을 호출한다**.
-3. 명확한 성공이면 짧은 transaction으로 `HELD -> CONFIRMED` 처리한다.
-4. 명확한 실패면 `HELD -> RELEASED` 처리하고 Y포인트 hold도 release한다.
-5. timeout/unknown이면 `HELD -> PAYMENT_UNKNOWN`으로 전이한다.
-6. **`PAYMENT_UNKNOWN`은 최초 unknown 이후 `30s`까지만 재고를 점유한다**.
-7. `30s` 안에 PG 성공을 확인하지 못하면 reservation을 release/expire하고 다음 후보에게 판매 기회를 넘긴다.
-8. **deadline 이후 늦게 PG 성공이 확인되어도 reservation을 다시 `CONFIRMED`로 되살리지 않는다**.
-9. 늦은 PG 성공은 `LATE_SUCCESS_CANCEL_PENDING -> CANCELLED_AFTER_RELEASE` 또는 `MANUAL_REVIEW_REQUIRED`로 정리한다.
+이 정책의 핵심은 "실패한 결제는 예약으로 확정하지 않고, 결과가 불명확한 결제는 짧게만 기다린 뒤 정리한다"이다.
 
-Recovery worker는 기존 WAS 내부에서 bounded budget으로 동작한다. 별도 worker pod를 필수로 두지 않는 이유는 인프라 증설이 제한적인 상황을 가정하고, 현재 범위에서는 기존 WAS 안의 scheduler와 MySQL lease로 충분히 중복 실행을 막을 수 있기 때문이다.
+사용자가 한도 초과, 카드 거절, 포인트 부족처럼 명확한 실패를 받으면 예약은 실패로 끝난다. 이때 시스템은 잡아두었던 재고와 Y포인트 hold를 즉시 반환하고, 해당 요청을 다시 확정 예약으로 되살리지 않는다.
+
+PG timeout, bulkhead full, 응답 유실처럼 성공인지 실패인지 알 수 없는 경우에는 바로 실패로 단정하지 않는다. 실제 PG에서는 이미 승인됐을 수 있기 때문이다. 대신 예약을 `PAYMENT_UNKNOWN`으로 표시하고, 최대 `30s` 동안만 재고를 임시 점유한다. `30s` 안에 PG 성공이 확인되면 예약을 확정하고, 확인하지 못하면 재고를 풀어 다음 후보에게 기회를 넘긴다.
+
+deadline 이후 늦게 PG 성공이 확인되어도 예약을 다시 `CONFIRMED`로 되살리지 않는다. 이미 풀린 재고가 다른 후보에게 넘어갔을 수 있으므로, 이 경우는 예약 확정이 아니라 PG 취소, 환불, 또는 manual review 대상으로 처리한다.
+
+#### 사용자 기준 흐름
+
+| 상황 | 사용자에게 보이는 결과 | 재고 처리 | 다음 후보 영향 |
+|---|---|---|---|
+| PG 승인 성공 | 예약 성공 | `10개` 재고 중 1개 확정 사용 | 없음 |
+| 한도 초과, 카드 거절, 포인트 부족 | 결제 실패 | 잡아둔 재고를 즉시 반환 | 대기 후보가 다음 기회를 받을 수 있음 |
+| PG timeout, 응답 유실 | 결제 확인 중 | 최대 `30s` 동안 임시 점유 | 아직 다음 후보에게 넘기지 않음 |
+| `30s` 안에 PG 성공 확인 | 예약 성공 | 확정 재고로 전환 | 없음 |
+| `30s` 안에 PG 실패 확인 | 결제 실패 | 재고 반환 | 대기 후보가 다음 기회를 받을 수 있음 |
+| `30s` 이후 PG 성공 확인 | 예약 실패 유지, 보상 처리 | 이미 반환한 재고를 되돌리지 않음 | 기존 다음 후보 처리를 우선함 |
+
+#### 내부 처리 순서
+
+예약과 결제는 하나의 긴 DB transaction으로 묶지 않는다. 외부 PG 지연이 DB connection과 lock을 오래 붙잡으면, 00:00 spike에서 DB가 먼저 병목이 될 수 있기 때문이다.
+
+```text
+1. MySQL transaction으로 reservation.HELD를 먼저 만든다.
+2. DB transaction 밖에서 PG confirm을 호출한다.
+3. PG 성공이면 짧은 transaction으로 HELD -> CONFIRMED 처리한다.
+4. PG 명시 실패이면 HELD -> RELEASED 처리하고 Y포인트 hold를 반환한다.
+5. PG timeout/unknown이면 HELD -> PAYMENT_UNKNOWN으로 전이한다.
+6. PAYMENT_UNKNOWN은 최초 unknown 이후 30s까지만 재고를 점유한다.
+7. 30s 안에 PG 성공을 확인하지 못하면 reservation을 반환/만료 처리한다.
+8. deadline 이후 늦은 PG 성공은 예약 확정이 아니라 cancel/refund/manual review로 정리한다.
+```
+
+이 구조는 초과판매를 막기 위해 `HELD`, `PAYMENT_UNKNOWN`, `CONFIRMED`를 모두 재고 점유 상태로 계산한다. 동시에 `PAYMENT_UNKNOWN`에는 deadline을 두어, 10개 한정 상품이 timeout 몇 건 때문에 오래 미달 판매로 남는 상황을 줄인다.
+
+#### 다음 후보 기회 승계
+
+결제 실패 후속 처리는 두 단계로 나눈다.
+
+1. 실패한 예약을 확정하지 않는다.
+2. 풀린 재고를 다음 후보가 가져갈 수 있게 한다.
+
+명확한 결제 실패가 확정되면 해당 admission은 실패로 닫고, 잡아두었던 `HELD` 재고를 즉시 반환한다. 그러면 대기 중인 다음 후보가 기회를 받을 수 있다.
+
+다만 이것은 서버가 다음 후보의 결제를 백그라운드에서 자동 실행한다는 뜻이 아니다. 결제 side effect는 사용자의 명시적인 booking request 안에서만 발생해야 한다. 따라서 다음 후보는 자신이 받은 `202 WAITING_CANDIDATE + RETRY_POST_BOOKINGS` 안내에 따라 짧게 retry/polling한다. 그 재요청 시점에 선착순/대기열 정책상 가장 앞선 유효 후보이고 waiting window 안에 있을 때만 `HELD`로 승격된다.
+
+```text
+A candidate:
+  ADMITTED -> HELD -> PAYMENT_FAILED
+  reservation RELEASED
+  admission FAILED
+  idempotency terminal snapshot 저장
+
+B waiting candidate:
+  기존 응답: 202 WAITING_CANDIDATE + RETRY_POST_BOOKINGS
+  A 실패 후 B가 재요청:
+    waiting window 안의 earliest valid candidate인지 확인
+    -> HELD reservation 생성
+    -> B 요청 흐름 안에서 payment confirm 진행
+```
+
+즉, 결제 실패는 다음 후보에게 기회를 열어주는 것이지, 다음 후보의 구매 성공을 보장하거나 자동 결제를 실행하는 것이 아니다.
+
+#### Recovery worker는 안전망이다
+
+Recovery worker는 위 사용자-facing 흐름에서 정리되지 못한 상태를 뒤에서 보정하는 안전망이다. 기존 WAS 내부에서 bounded budget으로 동작한다. 별도 worker pod를 필수로 두지 않는 이유는 인프라 증설이 제한적인 상황을 가정하고, 현재 범위에서는 기존 WAS 안의 scheduler와 MySQL lease로 충분히 중복 실행을 막을 수 있기 때문이다.
 
 Recovery worker 대상은 다음이다.
 
@@ -266,7 +322,7 @@ Recovery worker 대상은 다음이다.
 | waiting candidate 사용자-facing window | 60s | 후순위 후보가 대기할 수 있는 최대 시간 |
 | payment reconciliation 적극 window | 5분 | 재고 release 이후에도 payment/cancel 상태를 정리하는 운영 window |
 
-이 선택은 PG 취소 수수료, 환불 비용, CS 비용을 accepted compensation cost로 둔다. 요구사항상 더 중요한 것은 **초과판매 방지와 결제 실패/장애 후 재고 누수 방지다**.
+이 선택은 PG 취소 수수료, 환불 비용, CS 비용을 accepted compensation cost로 둔다. 요구사항상 더 중요한 것은 초과판매 방지와 결제 실패/장애 후 재고 누수 방지다.
 
 ---
 
@@ -288,26 +344,28 @@ Recovery worker 대상은 다음이다.
 
 ### 왜 그렇게 판단했는지
 
-최종 구조는 결제 요청을 **`PaymentPlan`으로 정규화하고**, **`CombinationPolicy`가 허용/금지 조합을 검증한** 뒤, 수단별 **`PaymentProcessor`가 실행하는** 방식이다.
+최종 구조의 핵심은 **Booking API가 결제 수단을 직접 알지 않게 하는 것**이다. Booking Application Service는 예약 흐름을 조정하고, 결제 조합의 허용 여부와 결제 수단별 실행 방식은 결제 domain policy/strategy로 분리한다.
 
-책임 분리는 다음과 같다.
+적용한 설계 개념은 다음과 같다.
 
-| 구성요소 | 책임 |
+| 개념 | 적용 |
 |---|---|
-| `PaymentPlan` | 요청 결제 수단, 금액, 포인트 사용액을 domain 객체로 정규화 |
-| `CombinationPolicy` | 신용카드+Y페이 혼용 금지, 포인트 조합 허용 여부 검증 |
-| `PaymentProcessor` | 신용카드, Y페이, Y포인트 등 수단별 hold/confirm/capture/release 실행 |
-| `PaymentProviderPort` | 외부 PG 또는 Mock PG confirm/query/cancel interface |
-| `PointHold` | Y포인트 `hold -> capture -> release` 멱등 상태 |
+| DDD Value Object | `PaymentPlan`으로 결제 수단과 금액을 정규화한다 |
+| Domain Policy | `CombinationPolicy`가 신용카드+Y페이 혼용 금지, 금액 일치 같은 조합 규칙을 검증한다 |
+| Strategy Pattern | `PaymentMethodProcessor` 구현체가 신용카드, Y페이, Y포인트의 실행 방식 차이를 담당한다 |
+| Registry / Factory | `PaymentProcessorRegistry`가 결제 수단에 맞는 processor를 선택해 `PaymentExecutionPlan`을 만든다 |
+| Port / Adapter | `PaymentProvider` interface 뒤로 실제 PG/Mock PG 연동을 숨긴다 |
 
-**Y포인트는 단순 차감 값이 아니라 결제 수단으로 본다.** 따라서 Y포인트도 `hold -> capture -> release` 상태를 가진다.
+이 구조는 SOLID 관점에서 SRP와 OCP를 우선한 선택이다. 조합 검증, 수단 선택, 외부 PG 호출, 예약 흐름을 분리하고, 새 결제 수단이 추가되어도 Booking Application Service의 핵심 예약 흐름에 수단별 `if/else`가 늘어나지 않게 한다.
+
+**Y포인트는 단순 차감 값이 아니라 내부 원장 결제 수단으로 본다.** 따라서 Y포인트도 `hold -> capture -> release` 상태를 가진다. 신용카드와 Y페이는 외부 provider 결제 수단이고, Y포인트는 내부 ledger 결제 수단이다. 복합 결제는 이 모델에서 "외부 provider 결제 최대 1개 + 내부 원장 결제"로 표현된다.
 
 - 결제 시작 시 포인트를 `hold`한다.
 - PG 성공이 reservation deadline 안에 확인되면 `capture`한다.
 - PG 명확한 실패 또는 reservation deadline release면 `release`한다.
 - 늦은 외부 PG 성공은 booking 확정이 아니라 cancel/refund/reconciliation 대상이다.
 
-이 구조는 DDD/OOP/SOLID 관점에서 Booking Application Service가 "예약 흐름 조정" 책임만 갖게 하고, 결제 수단별 규칙은 결제 domain policy/processor로 분리한다.
+새 결제 수단이 추가되면 `PaymentMethodType`, 해당 `PaymentMethodProcessor`, `CombinationPolicy`, 필요 시 `PaymentProvider` adapter와 테스트를 추가한다. 완전한 OCP를 주장하지는 않는다. 새 수단은 실제 domain rule 변경이므로 정책은 바뀌어야 한다. 이 결정의 목표는 변경을 없애는 것이 아니라, 변경이 **Booking API 핵심 예약 흐름으로 번지지 않고 결제 domain의 policy/strategy 경계 안에 머물게 하는 것**이다.
 
 ---
 
