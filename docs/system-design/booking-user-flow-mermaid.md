@@ -4,8 +4,8 @@
 
 ## 전제
 
-- 정상 admission은 Redis Lua script가 담당한다.
-- Redis 장애 시 같은 `sale_event_id`에서는 DB bounded admission fallback으로 전환한다.
+- 정상 admission은 Redis HA의 Lua script가 담당한다.
+- Redis failover, `WAIT` timeout, min-replica 조건 불만족 시 새 admission은 DB fallback으로 우회하지 않고 `ADMISSION_TEMPORARILY_UNAVAILABLE + Retry-After`로 짧게 pause한다.
 - 최종 재고 정합성은 MySQL inventory guard와 reservation 상태 전이로 보장한다.
 - PG confirm timeout/unknown은 즉시 성공/실패로 확정하지 않고 `PAYMENT_UNKNOWN`으로 두되, 재고 점유는 `30s` deadline까지만 허용한다.
 - Recovery worker는 기존 WAS 내부에서 작은 thread/batch/concurrency budget으로 실행되며, MySQL lease로 stale `HELD`와 `PAYMENT_UNKNOWN` 중복 처리를 막는다.
@@ -22,7 +22,7 @@ sequenceDiagram
     participant U as 사용자
     participant T as Traefik LB / Gateway
     participant A as Spring Boot WAS
-    participant R as Redis Admission
+    participant R as Redis HA Admission
     participant D as MySQL
     participant P as Mock PG
 
@@ -32,6 +32,7 @@ sequenceDiagram
 
     A->>A: booking_attempt_id / request_hash 확인
     A->>R: Lua admission<br/>duplicate check + seq 발급 + candidate 기록
+    A->>R: 새 admission이면 WAIT 1 short timeout
     R-->>A: admitted(seq) 또는 rejected
 
     alt Redis admission rejected
@@ -102,7 +103,7 @@ sequenceDiagram
     participant T as Traefik LB
     participant A1 as WAS-1
     participant A2 as WAS-2
-    participant R as Redis
+    participant R as Redis HA
     participant D as MySQL
     participant P as Mock PG
 
@@ -111,7 +112,7 @@ sequenceDiagram
     T->>T: health check로 WAS-1 제외
     T->>A2: 살아있는 WAS-2로 전달
 
-    A2->>R: Redis Lua admission
+    A2->>R: Redis Lua admission + WAIT
     R-->>A2: admitted(seq)
     A2->>D: reservation 생성 + inventory guard
     D-->>A2: HELD
@@ -133,7 +134,7 @@ sequenceDiagram
     end
 ```
 
-## 4. Redis 장애 상황
+## 4. Redis failover 상황
 
 ```mermaid
 sequenceDiagram
@@ -141,35 +142,29 @@ sequenceDiagram
     participant U as 사용자
     participant T as Traefik LB / Gateway
     participant A as Spring Boot WAS
-    participant R as Redis
+    participant R as Redis HA
     participant D as MySQL
-    participant P as Mock PG
 
     U->>T: POST /bookings
     T->>A: 요청 전달
 
-    A->>R: Redis Lua admission
-    R--x A: timeout / connection failure
+    A->>R: Redis Lua admission + WAIT
+    R--x A: failover / timeout / replica ACK 부족
 
-    A->>A: sale_event_id를 DB_FALLBACK으로 전환<br/>같은 sale_event_id에서는 Redis gate로 복귀하지 않음
-    A->>D: bounded DB admission<br/>candidate budget + short timeout + bulkhead
+    A->>D: gate_mode를 REDIS_FAILOVER_PAUSED로 표시
+    A-->>U: ADMISSION_TEMPORARILY_UNAVAILABLE<br/>Retry-After
 
-    alt DB admission budget 초과 또는 DB 보호 필요
-        D-->>A: admission 거절 또는 timeout
-        A-->>U: 빠른 실패 응답<br/>DB 보호
-    else DB admission accepted
-        D-->>A: db_admission_seq 발급 + candidate 기록
-        A->>D: reservation 생성 시도<br/>inventory conditional guard
-        D-->>A: HELD 또는 sold out
+    Note over A,D: failover 중 새 admission은 MySQL DB fallback으로 우회하지 않음
+    Note over A,R: pause TTL 동안 반복 probe 억제
 
-        alt reservation HELD
-            A->>P: confirm payment
-            P-->>A: success / failure / unknown
-            A->>D: 결과에 맞는 상태 전이
-            A-->>U: 확정/실패/확인 중 응답
-        else inventory guard 실패
-            A-->>U: 매진 응답
-        end
+    A->>R: pause TTL 이후 half-open probe<br/>Redis write + WAIT
+    alt probe 실패
+        R--x A: timeout / ACK 부족
+        A-->>U: Retry-After 유지
+    else probe 성공
+        R-->>A: write + WAIT success
+        A->>D: gate_mode REDIS 복구
+        A-->>U: 이후 요청부터 정상 admission 재개
     end
 ```
 
@@ -221,7 +216,10 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ADMITTED: Redis 또는 DB admission 통과
+    [*] --> ADMITTED: Redis admission + MySQL admission ledger 통과
+    [*] --> REDIS_FAILOVER_PAUSED: Redis failover / WAIT timeout
+    REDIS_FAILOVER_PAUSED --> [*]: Retry-After 응답
+    REDIS_FAILOVER_PAUSED --> ADMITTED: half-open probe 성공 후 재시도
     ADMITTED --> HELD: MySQL inventory guard 성공
     ADMITTED --> WAITING_CANDIDATE: candidate pool 30 내 후순위
     ADMITTED --> REJECTED: admission 거절 또는 매진

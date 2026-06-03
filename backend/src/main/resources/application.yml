@@ -36,12 +36,15 @@ peak-booking:
   waiting-timeout: ${PEAK_BOOKING_WAITING_TIMEOUT:60s}
   idempotency-retention: ${PEAK_BOOKING_IDEMPOTENCY_RETENTION:24h}
   reconciliation-window: ${PEAK_BOOKING_RECONCILIATION_WINDOW:5m}
+  redis-failover-retry-after: ${PEAK_BOOKING_REDIS_FAILOVER_RETRY_AFTER:8s}
+  redis-wait-replicas: ${PEAK_BOOKING_REDIS_WAIT_REPLICAS:0}
+  redis-wait-timeout: ${PEAK_BOOKING_REDIS_WAIT_TIMEOUT:0ms}
   bulkhead:
     booking-write-concurrency: ${PEAK_BOOKING_BOOKING_WRITE_CONCURRENCY:6}
-    db-fallback-concurrency: ${PEAK_BOOKING_DB_FALLBACK_CONCURRENCY:2}
     pg-confirm-concurrency: ${PEAK_BOOKING_PG_CONFIRM_CONCURRENCY:5}
     recovery-pg-concurrency: ${PEAK_BOOKING_RECOVERY_PG_CONCURRENCY:1}
     checkout-read-concurrency: ${PEAK_BOOKING_CHECKOUT_READ_CONCURRENCY:2}
+    redis-admission-concurrency: ${PEAK_BOOKING_REDIS_ADMISSION_CONCURRENCY:16}
   payment:
     call-timeout: ${PEAK_BOOKING_PAYMENT_CALL_TIMEOUT:500ms}
     confirm-recovery-grace: ${PEAK_BOOKING_PAYMENT_CONFIRM_RECOVERY_GRACE:50ms}

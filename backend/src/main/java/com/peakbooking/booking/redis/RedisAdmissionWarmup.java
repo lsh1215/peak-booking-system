@@ -45,7 +45,7 @@ public class RedisAdmissionWarmup implements ApplicationRunner {
         }
 
         log.warn(
-                "Redis admission warmup did not complete; booking write path will use bounded DB fallback if Redis is unavailable",
+                "Redis admission warmup did not complete; booking write path will pause admission while Redis failover is in progress",
                 lastFailure
         );
     }

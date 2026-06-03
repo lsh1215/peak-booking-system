@@ -18,6 +18,15 @@ services:
 
   redis:
     image: redis:7.4-alpine
+    environment:
+      REDIS_MIN_REPLICAS_TO_WRITE: ${REDIS_MIN_REPLICAS_TO_WRITE:-0}
+      REDIS_MIN_REPLICAS_MAX_LAG_SECONDS: ${REDIS_MIN_REPLICAS_MAX_LAG_SECONDS:-2}
+    command:
+      - redis-server
+      - --min-replicas-to-write
+      - ${REDIS_MIN_REPLICAS_TO_WRITE:-0}
+      - --min-replicas-max-lag
+      - ${REDIS_MIN_REPLICAS_MAX_LAG_SECONDS:-2}
     ports:
       - "6379:6379"
     healthcheck:

@@ -14,6 +14,7 @@ public record BookingProperties(
         Duration waitingTimeout,
         Duration idempotencyRetention,
         Duration reconciliationWindow,
+        Duration redisFailoverRetryAfter,
         Bulkhead bulkhead,
         Payment payment,
         Recovery recovery
@@ -21,10 +22,10 @@ public record BookingProperties(
 
     public record Bulkhead(
             int bookingWriteConcurrency,
-            int dbFallbackConcurrency,
             int pgConfirmConcurrency,
             int recoveryPgConcurrency,
-            int checkoutReadConcurrency
+            int checkoutReadConcurrency,
+            int redisAdmissionConcurrency
     ) {
     }
 

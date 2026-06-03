@@ -18,6 +18,7 @@ import com.peakbooking.booking.infrastructure.persistence.PaymentAttemptRecord;
 import com.peakbooking.booking.infrastructure.persistence.RecoveryClaim;
 import com.peakbooking.booking.infrastructure.persistence.ReservationCreationResult;
 import com.peakbooking.booking.infrastructure.persistence.ReservationRecord;
+import com.peakbooking.booking.infrastructure.jpa.entity.AdmissionSequenceEntity;
 import com.peakbooking.booking.infrastructure.jpa.entity.BookingAdmissionEntity;
 import com.peakbooking.booking.infrastructure.jpa.entity.IdempotencyRecordEntity;
 import com.peakbooking.booking.infrastructure.jpa.entity.PaymentAttemptEntity;
@@ -109,9 +110,14 @@ public class BookingJpaRepository {
                 .orElse(GateMode.REDIS);
     }
 
-    public void markDbFallback(long saleEventId, long productId) {
+    public void markRedisFailoverPaused(long saleEventId, long productId) {
         ensureAdmissionSequence(saleEventId, productId);
-        admissionSequenceRepository.markDbFallback(saleEventId, productId);
+        admissionSequenceRepository.markRedisFailoverPaused(saleEventId, productId);
+    }
+
+    public void markRedisRecovered(long saleEventId, long productId) {
+        ensureAdmissionSequence(saleEventId, productId);
+        admissionSequenceRepository.markRedisRecovered(saleEventId, productId);
     }
 
     public AdmissionDecision createAdmission(
@@ -125,8 +131,13 @@ public class BookingJpaRepository {
             LocalDateTime now
     ) {
         ensureAdmissionSequence(saleEventId, productId);
-        admissionSequenceRepository.findForUpdate(saleEventId, productId).orElseThrow();
+        AdmissionSequenceEntity sequence = admissionSequenceRepository
+                .findForUpdate(saleEventId, productId)
+                .orElseThrow();
 
+        if (sequence.getGateMode() != gateMode) {
+            return AdmissionDecision.rejected(sequence.getGateMode());
+        }
         Optional<AdmissionDecision> existing = findAdmission(saleEventId, productId, userId);
         if (existing.isPresent()) {
             return existing.get();

@@ -35,10 +35,18 @@ public interface AdmissionSequenceJpaRepository extends JpaRepository<AdmissionS
     @Modifying
     @Query(value = """
             UPDATE admission_sequence
-            SET gate_mode = 'DB_FALLBACK'
+            SET gate_mode = 'REDIS_FAILOVER_PAUSED'
             WHERE sale_event_id = :saleEventId AND product_id = :productId
             """, nativeQuery = true)
-    int markDbFallback(@Param("saleEventId") long saleEventId, @Param("productId") long productId);
+    int markRedisFailoverPaused(@Param("saleEventId") long saleEventId, @Param("productId") long productId);
+
+    @Modifying
+    @Query(value = """
+            UPDATE admission_sequence
+            SET gate_mode = 'REDIS'
+            WHERE sale_event_id = :saleEventId AND product_id = :productId
+            """, nativeQuery = true)
+    int markRedisRecovered(@Param("saleEventId") long saleEventId, @Param("productId") long productId);
 
     @Modifying
     @Query(value = """

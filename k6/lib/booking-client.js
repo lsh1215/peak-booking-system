@@ -144,6 +144,8 @@ function recordTechnicalFailure(response) {
 
 export function isControlledOverload(response) {
   const message = jsonPath(response, 'message') || '';
+  const code = businessCode(response);
   return (response.status === 503 && message === 'Service is temporarily busy')
+    || (response.status === 503 && code === 'ADMISSION_TEMPORARILY_UNAVAILABLE')
     || (response.status === 429 && message.includes('busy'));
 }

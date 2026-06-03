@@ -23,7 +23,7 @@ class RecoverySchedulerTest {
     }
 
     private BookingProperties propertiesWithNoJitter() {
-        BookingProperties base = BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2);
+        BookingProperties base = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
         return new BookingProperties(
                 base.saleEventId(),
                 base.candidateLimit(),
@@ -34,6 +34,7 @@ class RecoverySchedulerTest {
                 base.waitingTimeout(),
                 base.idempotencyRetention(),
                 base.reconciliationWindow(),
+                base.redisFailoverRetryAfter(),
                 base.bulkhead(),
                 base.payment(),
                 new BookingProperties.Recovery(

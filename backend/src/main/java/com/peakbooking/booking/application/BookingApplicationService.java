@@ -5,6 +5,7 @@ import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionResult;
 import com.peakbooking.booking.domain.BookingErrorCode;
 import com.peakbooking.booking.domain.CombinationPolicy;
+import com.peakbooking.booking.domain.GateMode;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import com.peakbooking.booking.payment.PaymentConfirmResult;
 import com.peakbooking.booking.payment.PaymentConfirmStatus;
@@ -87,17 +88,7 @@ public class BookingApplicationService {
                 token.attemptId()
         );
         if (admission.result() == AdmissionResult.REJECTED) {
-            return new BookingResult(
-                    429,
-                    "ADMISSION_REJECTED",
-                    token.attemptId(),
-                    null,
-                    null,
-                    null,
-                    true,
-                    "TRY_LATER_OR_SOLD_OUT",
-                    "Candidate pool is closed"
-            );
+            return rejectedAdmission(token.attemptId(), admission.gateMode());
         }
         Optional<BookingResult> canonicalAfterAdmission = dbWriteBulkhead.execute(() ->
                 transactionService.canonicalStateForDifferentAttempt(
@@ -164,6 +155,33 @@ public class BookingApplicationService {
 
     public long saleEventId() {
         return properties.saleEventId();
+    }
+
+    private BookingResult rejectedAdmission(String attemptId, GateMode gateMode) {
+        if (gateMode == GateMode.REDIS_FAILOVER_PAUSED) {
+            return new BookingResult(
+                    503,
+                    BookingResult.ADMISSION_TEMPORARILY_UNAVAILABLE,
+                    attemptId,
+                    null,
+                    null,
+                    null,
+                    true,
+                    "RETRY_AFTER_SHORT_PAUSE",
+                    "Redis failover is in progress"
+            );
+        }
+        return new BookingResult(
+                429,
+                "ADMISSION_REJECTED",
+                attemptId,
+                null,
+                null,
+                null,
+                true,
+                "TRY_LATER_OR_SOLD_OUT",
+                "Candidate pool is closed"
+        );
     }
 
     private ProductSummary productSummary(long productId) {

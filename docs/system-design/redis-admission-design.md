@@ -4,9 +4,9 @@
 
 ## 상태
 
-2026-05-31 기준 user가 수용한 설계 방향을 정리한 초안이다.
+2026-06-03 기준 user가 수용한 Redis HA + failover pause 설계 방향을 정리한 문서다.
 
-이 문서는 `docs/decisions/DECISIONS.md`를 대체하지 않는다. DEC-001, DEC-002, DEC-007과 이후 구현 작업에 필요한 Redis 관련 세부 설계를 보충한다.
+이 문서는 `docs/decisions/DECISIONS.md`를 대체하지 않는다. 쟁점 1, 쟁점 2, 쟁점 6과 이후 구현 작업에 필요한 Redis 관련 세부 설계를 보충한다.
 
 ## 핵심 입장
 
@@ -83,7 +83,7 @@ Redis seq issued
 -> admission is valid
 ```
 
-Redis 처리는 성공했지만 MySQL admission 기록에 실패했다면 클라이언트에 admission 성공을 알려서는 안 된다. 실패 원인에 따라 retry 가능한 실패를 반환하거나 해당 event epoch을 DB fallback으로 전환한다.
+Redis 처리는 성공했지만 MySQL admission 기록에 실패했다면 클라이언트에 admission 성공을 알려서는 안 된다. 실패 원인에 따라 retry 가능한 실패를 반환하고, Redis/DB 상태가 불명확하면 새 admission을 잠깐 pause한다. 기본 정책은 DB fallback으로 새 후보를 뽑는 것이 아니다.
 
 MySQL admission row에는 순서를 감사하고 복구할 수 있는 정보를 남겨야 한다.
 
@@ -91,7 +91,7 @@ MySQL admission row에는 순서를 감사하고 복구할 수 있는 정보를 
 product_id
 event_epoch
 user_id
-gate_mode          -- REDIS or DB_FALLBACK
+gate_mode          -- REDIS or REDIS_FAILOVER_PAUSED
 redis_seq          -- nullable
 db_admission_seq
 status             -- ADMITTED / PROCESSING / SUCCEEDED / FAILED / EXPIRED
@@ -112,17 +112,36 @@ SELECT LAST_INSERT_ID();
 
 ## Redis 장애와 복구
 
-Redis failure에는 hard down, command timeout, OOM/write failure, 예기치 않은 admission key loss, 더 이상 신뢰할 수 없는 admission state가 포함된다.
+Redis failure에는 hard down, command timeout, OOM/write failure, Sentinel failover, `WAIT` timeout, `min-replicas-to-write` 조건 불만족, 더 이상 신뢰할 수 없는 admission state가 포함된다.
 
-특정 event epoch에서 Redis admission failure가 감지되면 다음 mode로 전환한다.
+기본 장애 대응은 Redis HA다.
 
 ```text
-NORMAL_REDIS -> DB_FALLBACK
+Redis HA:
+  primary + replica 2대 권장
+  Sentinel 3대 또는 managed Redis HA
+
+Redis server:
+  min-replicas-to-write 1
+  min-replicas-max-lag 1~2s
+
+Application admission:
+  Lua admission
+  -> 새 admission이면 WAIT 1 short timeout
+  -> MySQL official admission ledger 저장
 ```
 
-fallback은 해당 event epoch 동안 sticky하게 유지한다. Redis가 나중에 복구되어도 같은 event epoch 안에서는 Redis admission으로 되돌아가지 않는다. 이렇게 해야 Redis ordering과 DB fallback ordering을 병합하면서 생기는 공정성 문제를 피할 수 있다.
+Redis failover 또는 replica ACK 불만족이 감지되면 다음 상태로 전환한다.
 
-다음 event epoch에서는 health check와 시작 상태가 정상일 때 Redis admission을 다시 사용할 수 있다.
+```text
+REDIS -> REDIS_FAILOVER_PAUSED
+```
+
+pause 상태에서는 새 admission을 MySQL DB fallback으로 우회하지 않는다. 응답은 retry 가능한 `ADMISSION_TEMPORARILY_UNAVAILABLE + Retry-After`다. 이렇게 해야 failover 중 Redis ordering과 DB ordering이 갈라지는 문제, 그리고 공유 DB로의 직접 부하 폭증을 막을 수 있다.
+
+pause TTL 이후에는 half-open probe를 수행한다. probe는 Redis write + `WAIT`가 성공해야 통과한다. 성공하면 gate를 `REDIS`로 복구하고, 실패하면 Retry-After window 동안 반복 probe를 억제한다.
+
+Redis HA와 `WAIT`는 유실 가능성을 줄이는 완화책이지 durable log와 같은 강한 일관성 보장은 아니다. Redis 장애 중에도 판매를 계속하면서 공식 도착 순서를 절대 유실하지 않아야 한다면 Redis 앞 또는 Redis 옆에 durable admission log를 추가해야 한다.
 
 ## TTL, Eviction, Persistence
 
@@ -136,7 +155,7 @@ Redis admission TTL
 + operational buffer
 ```
 
-초기값은 `24h`다. DEC-004의 idempotency record retention과 맞춰 운영 추적과 지연 retry 분석을 쉽게 하고, DEC-005의 `5분` 적극 reconciliation window보다 충분히 길게 둔다. 단, Redis TTL은 정리 편의 값이며 correctness나 audit의 원장은 MySQL이다.
+초기값은 `24h`다. 쟁점 3의 idempotency record retention과 맞춰 운영 추적과 지연 retry 분석을 쉽게 하고, 쟁점 4의 `5분` 적극 reconciliation window보다 충분히 길게 둔다. 단, Redis TTL은 정리 편의 값이며 correctness나 audit의 원장은 MySQL이다.
 
 Admission key는 일반 cache key처럼 취급하면 안 된다.
 
@@ -156,11 +175,13 @@ Redis persistence: optional recovery aid, correctness source 아님
 
 | 실패 상황 | 정책 |
 |---|---|
-| Redis command timeout | idempotent user admission lookup으로만 재시도한다. 불확실하면 DB_FALLBACK으로 전환한다. |
-| Redis OOM/write failure | Redis admission을 unavailable로 보고 bounded DB fallback을 사용한다. |
-| Redis key loss during active epoch | Redis admission state가 손상된 것으로 보고 MySQL admission ledger와 DB_FALLBACK을 사용한다. |
-| Redis recovers after fallback | 같은 epoch 안에서는 Redis admission으로 되돌아가지 않는다. |
-| DB fallback budget exhausted | retry 가능한 busy/unavailable 응답으로 fast fail한다. |
+| Redis command timeout | `REDIS_FAILOVER_PAUSED`로 전환하고 retryable unavailable 응답을 반환한다. |
+| Redis OOM/write failure | Redis admission을 unavailable로 보고 failover pause를 적용한다. |
+| `WAIT` timeout 또는 replica ACK 부족 | 새 admission을 유효 처리하지 않고 failover pause를 적용한다. |
+| `min-replicas-to-write` 조건 불만족 | Redis primary write를 신뢰하지 않고 failover pause를 적용한다. |
+| Redis key loss during active epoch | Redis admission state가 손상된 것으로 보고 새 admission을 pause한다. MySQL admission ledger와 inventory guard는 최종 정합성을 계속 보장한다. |
+| Redis recovers after pause | half-open probe가 Redis write + WAIT에 성공한 뒤에만 `REDIS`로 복구한다. |
+| half-open probe 실패 | Retry-After window 동안 반복 probe를 억제하고 retryable unavailable 응답을 반환한다. |
 
 ## 테스트 훅
 
@@ -170,8 +191,9 @@ Redis persistence: optional recovery aid, correctness source 아님
 - 같은 사용자의 반복 요청은 같은 admission sequence를 반환해야 한다.
 - candidate limit 초과 요청은 DB admission insert 없이 `BUSY`를 반환해야 한다.
 - MySQL row가 없는 Redis seq는 유효 admission으로 보지 않아야 한다.
-- Redis down/timeout/OOM은 bounded DB fallback으로 전환되어야 한다.
-- Redis 복구 후에도 같은 epoch은 DB_FALLBACK에서 Redis admission으로 되돌아가지 않아야 한다.
+- Redis down/timeout/OOM/WAIT timeout은 `REDIS_FAILOVER_PAUSED`로 전환되어야 한다.
+- failover pause 중 새 admission은 MySQL DB fallback으로 우회하면 안 된다.
+- Redis 복구 후 half-open probe가 Redis write + WAIT 성공을 확인해야 admission을 재개한다.
 - Redis key loss가 발생해도 MySQL이 최종 source of truth이므로 oversell이 발생하지 않아야 한다.
 
 ## 다음 설계 주제
@@ -181,4 +203,4 @@ Redis persistence: optional recovery aid, correctness source 아님
 - DB admission sequence와 uniqueness.
 - candidate tranche/status transitions.
 - reservation/hold model.
-- DEC-003의 final stock correctness mechanism.
+- 쟁점 1의 final stock correctness mechanism.

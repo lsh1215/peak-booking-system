@@ -16,7 +16,7 @@ class CheckoutApplicationServiceTest {
     void should_reject_before_repository_access_when_checkout_read_bulkhead_is_full() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         CheckoutApplicationService service = new CheckoutApplicationService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 0),
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 0),
                 repository,
                 mock(AttemptTokenService.class),
                 Clock.systemUTC()
