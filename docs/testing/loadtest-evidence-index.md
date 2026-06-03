@@ -1,45 +1,67 @@
-# 부하 테스트 증거 인덱스
+# Load Test Result Summary Form
 
-이 문서는 `DECISIONS.md`, `sdd.md`, `README.md`가 주장하는 성능/장애 대응 내용을 어떤 증거로 확인했는지 연결한다.
+> 부하 테스트 결과를 다시 작성하기 위한 단일 폼이다. 기존 v1 결과와 Redis 장애 fallback 수정 후 결과만 이 문서에 정리한다.
 
-`loadtest-results/`는 원시 로그, k6 summary, DB snapshot, Grafana capture를 담기 때문에 Git 추적 대상에서 제외한다. 대신 이 문서에는 제출자가 재현하거나 검토할 수 있도록 **요약, 로컬 원시 결과 위치, repository에 남은 테스트 코드, 남은 공백을** 기록한다.
+## 문서 메타데이터
 
-## 증거 상태 요약
-
-| 주장 | Repository 증거 | 로컬 원시 결과 | 상태 |
-|---|---|---|---|
-| 정상 `1000 RPS` 피크에서 confirmed booking은 `10`을 초과하지 않는다 | `BookingFlowIntegrationTest`, k6 script, MySQL final guard 코드 | `loadtest-results/20260602T184646Z-isolated-from-01-with-captures/01-peak-1000-*` | 확인 |
-| 중복 클릭은 중복 결제/중복 예약을 만들지 않는다 | idempotency test, `PaymentProcessorRegistryTest`, booking integration test | `loadtest-results/20260602T184646Z-isolated-from-01-with-captures/02-duplicate-500-*` | 확인 |
-| PG timeout은 즉시 성공 예약을 만들지 않고 reservation을 release한다 | recovery/integration test, `PAYMENT_UNKNOWN` 상태 전이 | `loadtest-results/20260602T184646Z-isolated-from-01-with-captures/03-pg-timeout-500-*` | 확인 |
-| WAS 1대만 남아도 oversell 없이 `10`개 판매까지 수렴한다 | stateless service 구조, k6 resilience script | `loadtest-results/20260602T184646Z-isolated-from-01-with-captures/04-was-one-down-500-*` | 확인 |
-| Redis hard-down 중 DB fallback은 최종 정책이 아니다 | `DECISIONS.md` 쟁점 2, Redis failover pause 코드 | `05-redis-down-500-*`, `07/08-shared-db-redis-down-*` | 역사적 참고 |
-| Redis master failover 중 새 admission은 DB fallback으로 우회하지 않는다 | `BookingAdmissionServiceTest`, `RedisAdmissionGatewayTest`, `BookingControllerTest` | 최신 raw failover k6 결과 파일은 repository에 없음 | 재실측 필요 |
-| Redis master failover 중 fast-fail latency와 dropped iteration 기준을 만족한다 | threshold 문서와 k6 script | 최신 raw failover k6 결과 파일은 repository에 없음 | 재실측 필요 |
-| mixed 장애에서 underfill 원인이 core reservation guard가 아니라 replay/recovery 시나리오인지 분리한다 | recovery test, `REQUESTED` recovery 보완 코드 | `06-mixed-500-*`는 구현 수정 전/중간 결과를 포함 | 재실측 필요 |
-
-## 현재 제출 문서에서 조심해야 하는 표현
-
-- Redis HA 설계는 **정합성 방향과 코드 테스트는 확보됐지만**, Redis master failover의 최종 k6 수치는 최신 원시 결과를 다시 남긴 뒤 주장해야 한다.
-- `redis-down` 단일 Redis scale-to-zero 결과는 현재 채택한 HA 정책의 합격/불합격 기준이 아니다. 이는 bounded DB fallback 후보를 폐기하게 만든 역사적 참고 증거다.
-- `loadtest-results`의 로컬 파일은 재현 과정 검토에는 유용하지만, Git으로 제출되는 공식 증거는 이 문서와 테스트 코드, k6 script, dashboard manifest다.
-
-## 다음에 남겨야 할 Redis HA failover 증거
-
-Redis master failover를 다시 실행하면 아래 파일을 같은 run directory에 남긴다.
-
-| 파일 | 목적 |
+| 항목 | 값 |
 |---|---|
-| `redis-master-failover-500-summary.json` | k6 summary와 threshold 결과 |
-| `redis-master-failover-500.log` | k6 실행 로그 |
-| `redis-master-failover-500-inventory.txt` | MySQL inventory/reservation/payment snapshot |
-| `redis-master-failover-500-cluster.txt` | pod restart, readiness, Redis/Sentinel 상태 |
-| `captures/*redis*`, `captures/*loadtest*`, `captures/*bottleneck*` | Grafana/Prometheus 관측 증거 |
+| 작성 날짜 | TODO |
+| 대상 브랜치/커밋 | TODO |
+| 테스트 환경 | TODO |
+| 비교 대상 | v1 기존 결과 vs local queue fallback 수정 후 결과 |
 
-합격으로 기록하려면 최소 조건은 다음이다.
+## 요약 결론
 
-- confirmed booking `<= 10`.
-- occupied reservation `<= 10`.
-- Redis failover 중 새 admission이 MySQL DB fallback으로 우회하지 않는다.
-- failover pause 응답은 `ADMISSION_TEMPORARILY_UNAVAILABLE + Retry-After`로 분리된다.
-- half-open probe는 Redis write + `WAIT` 성공 뒤에만 admission을 재개한다.
-- technical failure와 controlled rejection을 분리해 집계한다.
+- TODO:
+
+## 비교 결과
+
+| 구분 | v1 기존 결과 | 수정 후 결과 | 판정 | 비고 |
+|---|---|---|---|---|
+| 초과판매 여부 | TODO | TODO | TODO | TODO |
+| confirmed count | TODO | TODO | TODO | TODO |
+| occupied count | TODO | TODO | TODO | TODO |
+| Redis 장애 중 응답 분포 | TODO | TODO | TODO | TODO |
+| local queue accepted/full | 해당 없음 | TODO | TODO | TODO |
+| worker drain 시간 | 해당 없음 | TODO | TODO | TODO |
+| DB pressure | TODO | TODO | TODO | TODO |
+| p95 latency | TODO | TODO | TODO | TODO |
+| dropped iterations | TODO | TODO | TODO | TODO |
+
+## 실행 명령
+
+| 구분 | 명령 | 비고 |
+|---|---|---|
+| v1 기존 결과 | TODO | TODO |
+| 수정 후 결과 | TODO | TODO |
+
+## 원시 결과 위치
+
+| 구분 | 파일/디렉토리 | 포함 내용 |
+|---|---|---|
+| v1 기존 결과 | TODO | TODO |
+| 수정 후 결과 | TODO | TODO |
+
+## DB Snapshot
+
+| 구분 | confirmed | held | payment_unknown | released/failed | 비고 |
+|---|---:|---:|---:|---:|---|
+| v1 기존 결과 | TODO | TODO | TODO | TODO | TODO |
+| 수정 후 결과 | TODO | TODO | TODO | TODO | TODO |
+
+## 관측 지표
+
+| 지표 | v1 기존 결과 | 수정 후 결과 | 해석 |
+|---|---|---|---|
+| Hikari active/pending | TODO | TODO | TODO |
+| Redis timeout/failover | TODO | TODO | TODO |
+| local queue active_count | 해당 없음 | TODO | TODO |
+| local queue full count | 해당 없음 | TODO | TODO |
+| PG confirm count | TODO | TODO | TODO |
+
+## 남은 확인 사항
+
+| ID | 항목 | 필요한 작업 | 우선순위 |
+|---|---|---|---|
+| TODO | TODO | TODO | TODO |

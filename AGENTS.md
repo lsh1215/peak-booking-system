@@ -51,22 +51,20 @@ For architecture or design work:
 
 1. `docs/requirements.md`
 2. `docs/decisions/DECISIONS.md`
-3. `docs/research/source-backed-research-note.md`
-4. `docs/testing/test-first-scenarios.md`
-5. `docs/reviews/adversarial-review.md`
-6. `docs/system-design/mock-interview.md` or `docs/system-design/sdd.md`
+3. `docs/testing/loadtest-evidence-index.md`
+4. `docs/system-design/mock-interview.md` or `docs/system-design/sdd.md`
 
 For backend implementation work:
 
 1. `AGENTS.md`
 2. nearest files of the same type once source exists
 3. `docs/requirements.md`
-4. `docs/testing/test-first-scenarios.md`
+4. `docs/testing/loadtest-evidence-index.md`
 5. relevant `.codex/skills/*/SKILL.md`
 
 ## Working Modes
 
-- Requirements/design: update `docs/system-design/`, `docs/decisions/`, and `docs/research/`.
+- Requirements/design: update `docs/system-design/`, `docs/decisions/`, and the load-test result form when verification evidence changes.
 - Backend implementation: use the Spring/domain/layer skills under `.codex/skills/`.
 - Test-first work: use `.codex/skills/test-first-prompting/SKILL.md`.
 - Adversarial review: use `.codex/skills/adversarial-review/SKILL.md`.
@@ -124,14 +122,14 @@ When code exists:
 - Every fallback feature needs a degraded dependency test.
 - Every retry feature needs a retry cap or retry storm test.
 - Use Testcontainers for MySQL/Redis integration behavior once the backend exists.
-- Update `docs/testing/test-first-scenarios.md` when adding or closing a scenario.
+- Update `docs/testing/loadtest-evidence-index.md` when recording load-test scenarios or results.
 
 ## Documentation Rules
 
 - Keep `README.md` human-facing and concise.
 - Keep `AGENTS.md` agent-facing and operational.
 - Keep long rationale in `docs/`.
-- Keep source-backed technical claims in `docs/research/source-backed-research-note.md`.
+- Keep source-backed technical claims in decision/design documents with explicit references when external evidence is used.
 - Keep decisions in `docs/decisions/DECISIONS.md` with alternatives and rejection reasons.
 - Keep AI disclosure in `docs/ai/AI_USAGE.md`.
 

@@ -4,6 +4,7 @@ import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.PaymentAttemptStatus;
 import com.peakbooking.booking.domain.ReservationStatus;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
+import com.peakbooking.booking.infrastructure.persistence.AdmissionRecord;
 import com.peakbooking.booking.infrastructure.persistence.PaymentAttemptRecord;
 import com.peakbooking.booking.infrastructure.persistence.RecoveryClaim;
 import com.peakbooking.booking.infrastructure.persistence.ReservationRecord;
@@ -15,31 +16,20 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
+@RequiredArgsConstructor
 public class RecoveryWorkerService {
 
     private final BookingProperties properties;
     private final BookingJpaRepository repository;
+    private final BookingAdmissionService admissionService;
     private final PaymentCallGuard paymentCallGuard;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
-
-    public RecoveryWorkerService(
-            BookingProperties properties,
-            BookingJpaRepository repository,
-            PaymentCallGuard paymentCallGuard,
-            Clock clock,
-            TransactionTemplate transactionTemplate
-    ) {
-        this.properties = properties;
-        this.repository = repository;
-        this.paymentCallGuard = paymentCallGuard;
-        this.clock = clock;
-        this.transactionTemplate = transactionTemplate;
-    }
 
     public int recoverDueReservations() {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -57,28 +47,38 @@ public class RecoveryWorkerService {
         for (RecoveryClaim claim : claims) {
             recoverClaim(claim);
         }
+        List<AdmissionRecord> expiredWaitingCandidates = transactionTemplate.execute(status ->
+                repository.expireWaitingCandidates(LocalDateTime.now(clock), properties.recovery().batchSize())
+        );
+        if (expiredWaitingCandidates != null) {
+            expiredWaitingCandidates.forEach(admission ->
+                    releaseActiveCandidateSlot(admission, "WAITING_EXPIRED")
+            );
+        }
         transactionTemplate.execute(status -> {
             repository.markManualReviewAfterWindow(LocalDateTime.now(clock));
             return null;
         });
-        return claims.size();
+        return claims.size() + (expiredWaitingCandidates == null ? 0 : expiredWaitingCandidates.size());
     }
 
     public void releaseExpiredHeld(long reservationId) {
-        transactionTemplate.execute(status -> {
-            releaseExpiredHeldInTransaction(reservationId);
-            return null;
-        });
+        ReservationRecord released = transactionTemplate.execute(status -> releaseExpiredHeldInTransaction(reservationId));
+        if (released != null) {
+            releaseActiveCandidateSlot(released, "HELD_EXPIRED");
+        }
     }
 
-    private void releaseExpiredHeldInTransaction(long reservationId) {
+    private ReservationRecord releaseExpiredHeldInTransaction(long reservationId) {
         ReservationRecord reservation = repository.findReservationForUpdate(reservationId).orElseThrow();
         if (reservation.status() == ReservationStatus.HELD
                 && reservation.holdExpiresAt() != null
                 && !reservation.holdExpiresAt().isAfter(LocalDateTime.now(clock))) {
             repository.releaseReservation(reservation, "HELD_EXPIRED", LocalDateTime.now(clock));
             repository.releasePoints(reservation.bookingAttemptId());
+            return reservation;
         }
+        return null;
     }
 
     private void recoverClaim(RecoveryClaim claim) {
@@ -99,13 +99,17 @@ public class RecoveryWorkerService {
         boolean releaseAfterDeadline = reservation.unknownInventoryDeadlineAt() != null
                 && !reservation.unknownInventoryDeadlineAt().isAfter(LocalDateTime.now(clock));
         if (releaseAfterDeadline) {
-            transactionTemplate.execute(status -> {
+            ReservationRecord released = transactionTemplate.execute(status -> {
                 if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     releaseUnknownAfterDeadline(reservation);
                     completeReleasedReplay(reservation, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED");
+                    return reservation;
                 }
                 return null;
             });
+            if (released != null) {
+                releaseActiveCandidateSlot(released, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED");
+            }
             PaymentAttemptRecord payment = claim.paymentAttempt();
             PaymentStatusResult paymentStatus = queryPayment(payment);
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
@@ -126,19 +130,22 @@ public class RecoveryWorkerService {
 
         PaymentAttemptRecord payment = claim.paymentAttempt();
         PaymentStatusResult paymentStatus = queryPayment(payment);
-        transactionTemplate.execute(status -> {
+        ReservationRecord released = transactionTemplate.execute(status -> {
             if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
-                applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+                return applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
             }
             return null;
         });
+        if (released != null) {
+            releaseActiveCandidateSlot(released, paymentStatus.status().name());
+        }
     }
 
     private void recoverHeld(RecoveryClaim claim) {
         ReservationRecord reservation = claim.reservation();
         PaymentAttemptRecord payment = claim.paymentAttempt();
         if (payment.status() == PaymentAttemptStatus.REQUESTED && payment.confirmStartedAt() == null) {
-            transactionTemplate.execute(status -> {
+            ReservationRecord released = transactionTemplate.execute(status -> {
                 if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
                     if (locked.status() == ReservationStatus.HELD) {
@@ -150,29 +157,39 @@ public class RecoveryWorkerService {
                         repository.releasePoints(locked.bookingAttemptId());
                         repository.markPaymentFailed(locked.bookingAttemptId(), "PAYMENT_CONFIRM_NOT_STARTED");
                         completeFailedReplay(locked, "PAYMENT_CONFIRM_NOT_STARTED");
+                        return locked;
                     }
                 }
                 return null;
             });
+            if (released != null) {
+                releaseActiveCandidateSlot(released, "PAYMENT_CONFIRM_NOT_STARTED");
+            }
             return;
         }
         boolean pgMayHaveBeenCalled = payment.status() == PaymentAttemptStatus.CONFIRMING
                 || payment.confirmStartedAt() != null;
         if (!pgMayHaveBeenCalled) {
-            transactionTemplate.execute(status -> {
+            ReservationRecord released = transactionTemplate.execute(status -> {
                 if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
-                    releaseExpiredHeldInTransaction(reservation.id());
-                    completeReleasedReplay(reservation, "HELD_EXPIRED");
+                    ReservationRecord releasedReservation = releaseExpiredHeldInTransaction(reservation.id());
+                    if (releasedReservation != null) {
+                        completeReleasedReplay(releasedReservation, "HELD_EXPIRED");
+                    }
+                    return releasedReservation;
                 }
                 return null;
             });
+            if (released != null) {
+                releaseActiveCandidateSlot(released, "HELD_EXPIRED");
+            }
             return;
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
         boolean afterDeadline = reservation.holdExpiresAt() == null || !reservation.holdExpiresAt().isAfter(now);
         if (afterDeadline) {
-            transactionTemplate.execute(status -> {
+            ReservationRecord released = transactionTemplate.execute(status -> {
                 if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
                     if (locked.status() == ReservationStatus.HELD) {
@@ -184,10 +201,14 @@ public class RecoveryWorkerService {
                                 LocalDateTime.now(clock).plus(properties.reconciliationWindow())
                         );
                         completeReleasedReplay(locked, "HELD_CONFIRM_DEADLINE_EXPIRED");
+                        return locked;
                     }
                 }
                 return null;
             });
+            if (released != null) {
+                releaseActiveCandidateSlot(released, "HELD_CONFIRM_DEADLINE_EXPIRED");
+            }
             PaymentStatusResult paymentStatus = queryPayment(payment);
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
                 PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "held reservation released after deadline");
@@ -206,15 +227,15 @@ public class RecoveryWorkerService {
         }
 
         PaymentStatusResult paymentStatus = queryPayment(payment);
-        transactionTemplate.execute(status -> {
+        ReservationRecord released = transactionTemplate.execute(status -> {
             if (!leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                 return null;
             }
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
-                applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+                return applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
             } else if (paymentStatus.status() == PaymentStatus.FAILED
                     || paymentStatus.status() == PaymentStatus.CANCELLED) {
-                applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
+                return applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
             } else {
                 ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
                 repository.markPaymentUnknown(
@@ -232,9 +253,12 @@ public class RecoveryWorkerService {
             }
             return null;
         });
+        if (released != null) {
+            releaseActiveCandidateSlot(released, paymentStatus.status().name());
+        }
     }
 
-    private void applyPaymentStatusBeforeDeadline(
+    private ReservationRecord applyPaymentStatusBeforeDeadline(
             ReservationRecord reservation,
             PaymentAttemptRecord payment,
             PaymentStatusResult status
@@ -265,6 +289,7 @@ public class RecoveryWorkerService {
             repository.releasePoints(reservation.bookingAttemptId());
             repository.markPaymentFailed(reservation.bookingAttemptId(), status.status().name());
             completeReleasedReplay(reservation, status.status().name());
+            return reservation;
         } else {
             repository.scheduleNextReconcile(
                     reservation.bookingAttemptId(),
@@ -272,6 +297,7 @@ public class RecoveryWorkerService {
                     now
             );
         }
+        return null;
     }
 
     public void releaseUnknownAfterDeadline(ReservationRecord reservation) {
@@ -372,6 +398,44 @@ public class RecoveryWorkerService {
                 "Payment did not start"
         );
         repository.completeIdempotencyIfExists(reservation.bookingAttemptId(), result);
+    }
+
+    private void releaseActiveCandidateSlot(ReservationRecord reservation, String reason) {
+        repository.findAdmissionRecord(reservation.admissionId())
+                .map(AdmissionRecord::redisSeq)
+                .ifPresent(redisSeq -> releaseActiveCandidateSlot(
+                        reservation.saleEventId(),
+                        reservation.productId(),
+                        reservation.userId(),
+                        redisSeq,
+                        reason
+                ));
+    }
+
+    private void releaseActiveCandidateSlot(AdmissionRecord admission, String reason) {
+        releaseActiveCandidateSlot(
+                admission.saleEventId(),
+                admission.productId(),
+                admission.userId(),
+                admission.redisSeq(),
+                reason
+        );
+    }
+
+    private void releaseActiveCandidateSlot(
+            long saleEventId,
+            long productId,
+            long userId,
+            Long redisSeq,
+            String reason
+    ) {
+        admissionService.releaseActiveCandidate(
+                saleEventId,
+                productId,
+                userId,
+                redisSeq,
+                reason
+        );
     }
 
     private boolean leaseTokenMatches(String bookingAttemptId, String leaseToken) {

@@ -52,13 +52,9 @@ public interface AdmissionSequenceJpaRepository extends JpaRepository<AdmissionS
     @Query(value = """
             UPDATE admission_sequence
             SET next_seq = next_seq + 1
-            WHERE sale_event_id = :saleEventId AND product_id = :productId AND next_seq < :candidateLimit
+            WHERE sale_event_id = :saleEventId AND product_id = :productId
             """, nativeQuery = true)
-    int incrementIfUnderLimit(
-            @Param("saleEventId") long saleEventId,
-            @Param("productId") long productId,
-            @Param("candidateLimit") int candidateLimit
-    );
+    int increment(@Param("saleEventId") long saleEventId, @Param("productId") long productId);
 
     @Query(value = """
             SELECT next_seq

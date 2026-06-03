@@ -31,6 +31,7 @@ public class BookingApplicationService {
     private final CanonicalRequestHashCalculator requestHashCalculator;
     private final CombinationPolicy combinationPolicy;
     private final BookingAdmissionService admissionService;
+    private final LocalWaitingRoom localWaitingRoom;
     private final BookingTransactionService transactionService;
     private final BookingDbWriteBulkhead dbWriteBulkhead;
     private final PaymentCallGuard paymentCallGuard;
@@ -46,6 +47,7 @@ public class BookingApplicationService {
             CanonicalRequestHashCalculator requestHashCalculator,
             CombinationPolicy combinationPolicy,
             BookingAdmissionService admissionService,
+            LocalWaitingRoom localWaitingRoom,
             BookingTransactionService transactionService,
             BookingDbWriteBulkhead dbWriteBulkhead,
             PaymentCallGuard paymentCallGuard,
@@ -59,6 +61,7 @@ public class BookingApplicationService {
         this.requestHashCalculator = requestHashCalculator;
         this.combinationPolicy = combinationPolicy;
         this.admissionService = admissionService;
+        this.localWaitingRoom = localWaitingRoom;
         this.transactionService = transactionService;
         this.dbWriteBulkhead = dbWriteBulkhead;
         this.paymentCallGuard = paymentCallGuard;
@@ -68,10 +71,19 @@ public class BookingApplicationService {
     }
 
     public BookingResult book(BookingCommand command) {
-        return doBook(command);
+        return doBook(command, false);
     }
 
-    private BookingResult doBook(BookingCommand command) {
+    BookingResult processLocalQueued(BookingCommand command) {
+        return doBook(command, true);
+    }
+
+    public BookingResult status(String bookingAttemptId) {
+        return localWaitingRoom.status(bookingAttemptId)
+                .orElseGet(() -> dbWriteBulkhead.execute(() -> transactionService.currentState(bookingAttemptId)));
+    }
+
+    private BookingResult doBook(BookingCommand command, boolean localQueueWorker) {
         AttemptToken token = attemptTokenService.verify(
                 command.bookingAttemptToken(),
                 command.userId(),
@@ -90,13 +102,36 @@ public class BookingApplicationService {
                 token.attemptId()
         );
 
-        AdmissionDecision admission = admissionService.admit(
-                command.saleEventId(),
-                command.productId(),
-                command.userId(),
-                token.attemptId()
-        );
+        if (!localQueueWorker && localWaitingRoom.shouldPreferLocalQueue()) {
+            return enqueueLocal(command, token.attemptId(), requestHash);
+        }
+
+        AdmissionDecision admission = localQueueWorker
+                ? admissionService.admitFromLocalQueue(
+                        command.saleEventId(),
+                        command.productId(),
+                        command.userId(),
+                        token.attemptId()
+                )
+                : admissionService.admit(
+                        command.saleEventId(),
+                        command.productId(),
+                        command.userId(),
+                        token.attemptId()
+                );
+        if (admission.result() == AdmissionResult.WAITING_ROOM) {
+            return waitingRoom(token.attemptId());
+        }
         if (admission.result() == AdmissionResult.REJECTED) {
+            if (!localQueueWorker && admission.gateMode() == GateMode.REDIS_FAILOVER_PAUSED) {
+                Optional<BookingResult> replay = dbWriteBulkhead.execute(() ->
+                        transactionService.replayExisting(token.attemptId(), requestHash)
+                );
+                if (replay.isPresent()) {
+                    return replay.get();
+                }
+                return enqueueLocal(command, token.attemptId(), requestHash);
+            }
             return rejectedAdmission(token.attemptId(), admission.gateMode());
         }
         Optional<BookingResult> canonicalAfterAdmission = dbWriteBulkhead.execute(() ->
@@ -136,6 +171,7 @@ public class BookingApplicationService {
             return dbWriteBulkhead.execute(() -> transactionService.currentState(token.attemptId()));
         }
         if (preparation.status() == PaymentPreparationResult.Status.FAILED) {
+            releaseActiveCandidateAfterTerminalFailure(command, admission, preparation.terminalResult());
             return preparation.terminalResult();
         }
 
@@ -161,17 +197,68 @@ public class BookingApplicationService {
             ));
         }
         if (payment.status() == PaymentConfirmStatus.FAILURE) {
-            return dbWriteBulkhead.execute(() -> transactionService.fail(
+            BookingResult failed = dbWriteBulkhead.execute(() -> transactionService.fail(
                     token.attemptId(),
                     reservationId,
                     payment.errorCode()
             ));
+            releaseActiveCandidateAfterTerminalFailure(command, admission, failed);
+            return failed;
         }
         return dbWriteBulkhead.execute(() -> transactionService.unknown(
                 token.attemptId(),
                 reservationId,
                 payment.providerPaymentId()
         ));
+    }
+
+    private BookingResult enqueueLocal(BookingCommand command, String attemptId, String requestHash) {
+        LocalQueueSubmission submission = localWaitingRoom.enqueue(command, attemptId, requestHash);
+        return switch (submission.status()) {
+            case ACCEPTED, ALREADY_ACCEPTED -> localQueued(attemptId, submission.queuePosition());
+            case ALREADY_COMPLETED -> submission.completedResult();
+            case CONFLICT -> throw new BusinessException(BookingErrorCode.IDEMPOTENCY_CONFLICT);
+            case FULL -> localQueueFull(attemptId);
+            case DISABLED -> new BookingResult(
+                    503,
+                    BookingResult.ADMISSION_TEMPORARILY_UNAVAILABLE,
+                    attemptId,
+                    null,
+                    null,
+                    null,
+                    true,
+                    "RETRY_AFTER_SHORT_PAUSE",
+                    "Redis failover is in progress"
+            );
+        };
+    }
+
+    private BookingResult localQueued(String attemptId, int queuePosition) {
+        return new BookingResult(
+                202,
+                BookingResult.LOCAL_QUEUE_ACCEPTED,
+                attemptId,
+                null,
+                null,
+                null,
+                true,
+                "POLL_BOOKING_STATUS",
+                "Accepted in local waiting room. Approximate local position: " + queuePosition
+        );
+    }
+
+    private BookingResult localQueueFull(String attemptId) {
+        return new BookingResult(
+                429,
+                BookingResult.LOCAL_QUEUE_FULL,
+                attemptId,
+                null,
+                null,
+                null,
+                true,
+                "RETRY_AFTER_SHORT_PAUSE",
+                "Local waiting room is full"
+        );
     }
 
     public long saleEventId() {
@@ -202,6 +289,40 @@ public class BookingApplicationService {
                 true,
                 "TRY_LATER_OR_SOLD_OUT",
                 "Candidate pool is closed"
+        );
+    }
+
+    private BookingResult waitingRoom(String attemptId) {
+        return new BookingResult(
+                202,
+                "WAITING_ROOM",
+                attemptId,
+                null,
+                null,
+                null,
+                true,
+                "RETRY_POST_BOOKINGS",
+                "Waiting for an active candidate slot"
+        );
+    }
+
+    private void releaseActiveCandidateAfterTerminalFailure(
+            BookingCommand command,
+            AdmissionDecision admission,
+            BookingResult result
+    ) {
+        if (!"PAYMENT_FAILED".equals(result.businessCode())
+                && !"POINTS_NOT_ENOUGH".equals(result.businessCode())
+                && !"WAITING_EXPIRED".equals(result.businessCode())
+                && !"RESERVATION_RELEASED".equals(result.businessCode())) {
+            return;
+        }
+        admissionService.releaseActiveCandidate(
+                command.saleEventId(),
+                command.productId(),
+                command.userId(),
+                admission.redisSeq(),
+                result.businessCode()
         );
     }
 

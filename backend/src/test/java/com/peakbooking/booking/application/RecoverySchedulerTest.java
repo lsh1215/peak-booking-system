@@ -35,6 +35,7 @@ class RecoverySchedulerTest {
                 base.idempotencyRetention(),
                 base.reconciliationWindow(),
                 base.redisFailoverRetryAfter(),
+                base.localQueue(),
                 base.bulkhead(),
                 base.payment(),
                 new BookingProperties.Recovery(

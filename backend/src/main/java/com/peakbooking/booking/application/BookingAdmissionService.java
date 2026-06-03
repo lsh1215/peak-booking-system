@@ -96,6 +96,56 @@ public class BookingAdmissionService {
         }
     }
 
+    public void releaseActiveCandidate(
+            long saleEventId,
+            long productId,
+            long userId,
+            Long redisSeq,
+            String reason
+    ) {
+        if (redisSeq == null || redisSeq <= 0) {
+            return;
+        }
+        try {
+            boolean released = redisAdmissionGateway.releaseAdmission(productId, saleEventId, userId, redisSeq);
+            if (!released) {
+                log.debug(
+                        "Redis active candidate release skipped saleEventId={} productId={} userId={} redisSeq={} reason={}",
+                        saleEventId,
+                        productId,
+                        userId,
+                        redisSeq,
+                        reason
+                );
+            }
+        } catch (RuntimeException failure) {
+            log.warn(
+                    "Redis active candidate release failed saleEventId={} productId={} userId={} redisSeq={} reason={}",
+                    saleEventId,
+                    productId,
+                    userId,
+                    redisSeq,
+                    reason,
+                    failure
+            );
+        }
+    }
+
+    public AdmissionDecision admitFromLocalQueue(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId
+    ) {
+        return dbWriteBulkhead.execute(() -> transactionService.createLocalQueueAdmission(
+                saleEventId,
+                productId,
+                userId,
+                bookingAttemptId,
+                properties.candidateLimit()
+        ));
+    }
+
     private AdmissionDecision redisAdmissionWithDurablePersistence(
             long saleEventId,
             long productId,
@@ -107,6 +157,9 @@ public class BookingAdmissionService {
                 return AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED);
             }
             RedisAdmissionGateway.Result result = tryRedisAdmission(saleEventId, productId, userId);
+            if (result.waitingRoom()) {
+                return AdmissionDecision.waitingRoom(result.redisSeq(), result.candidateRank(), GateMode.REDIS);
+            }
             if (!result.admitted()) {
                 return AdmissionDecision.rejected(GateMode.REDIS);
             }

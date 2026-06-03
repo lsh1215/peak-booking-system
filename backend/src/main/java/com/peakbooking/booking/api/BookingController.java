@@ -13,6 +13,8 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -52,10 +54,25 @@ public class BookingController {
         );
         BookingResult result = bookingApplicationService.book(command);
         ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.valueOf(result.httpStatus()));
-        if (BookingResult.ADMISSION_TEMPORARILY_UNAVAILABLE.equals(result.businessCode())) {
+        if (needsRetryAfter(result)) {
             response.header("Retry-After", Long.toString(retryAfterSeconds()));
         }
         return response.body(ApiResponse.ok(BookingResponse.from(result)));
+    }
+
+    @GetMapping("/status/{bookingAttemptId}")
+    public ResponseEntity<ApiResponse<BookingResponse>> status(@PathVariable String bookingAttemptId) {
+        BookingResult result = bookingApplicationService.status(bookingAttemptId);
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.valueOf(result.httpStatus()));
+        if (needsRetryAfter(result)) {
+            response.header("Retry-After", Long.toString(retryAfterSeconds()));
+        }
+        return response.body(ApiResponse.ok(BookingResponse.from(result)));
+    }
+
+    private boolean needsRetryAfter(BookingResult result) {
+        return BookingResult.ADMISSION_TEMPORARILY_UNAVAILABLE.equals(result.businessCode())
+                || BookingResult.LOCAL_QUEUE_FULL.equals(result.businessCode());
     }
 
     private long retryAfterSeconds() {

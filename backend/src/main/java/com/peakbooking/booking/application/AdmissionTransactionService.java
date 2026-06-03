@@ -39,6 +39,24 @@ public class AdmissionTransactionService {
     }
 
     @Transactional
+    public AdmissionDecision createLocalQueueAdmission(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId,
+            int candidateLimit
+    ) {
+        return repository.createLocalQueueAdmission(
+                saleEventId,
+                productId,
+                userId,
+                bookingAttemptId,
+                candidateLimit,
+                LocalDateTime.now(clock)
+        );
+    }
+
+    @Transactional
     public void markRedisFailoverPaused(long saleEventId, long productId) {
         repository.markRedisFailoverPaused(saleEventId, productId);
     }

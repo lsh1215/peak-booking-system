@@ -15,6 +15,7 @@ public record BookingProperties(
         Duration idempotencyRetention,
         Duration reconciliationWindow,
         Duration redisFailoverRetryAfter,
+        LocalQueue localQueue,
         Bulkhead bulkhead,
         Payment payment,
         Recovery recovery
@@ -26,6 +27,16 @@ public record BookingProperties(
             int recoveryPgConcurrency,
             int checkoutReadConcurrency,
             int redisAdmissionConcurrency
+    ) {
+    }
+
+    public record LocalQueue(
+            boolean enabled,
+            int capacity,
+            int workerBatchSize,
+            Duration workerFixedDelay,
+            Duration drainGrace,
+            Duration resultRetention
     ) {
     }
 

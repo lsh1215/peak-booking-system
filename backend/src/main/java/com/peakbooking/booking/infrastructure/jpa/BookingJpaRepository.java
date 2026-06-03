@@ -39,10 +39,12 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class BookingJpaRepository {
 
     private final ProductJpaRepository productRepository;
@@ -58,30 +60,6 @@ public class BookingJpaRepository {
 
     @PersistenceContext
     private EntityManager entityManager;
-
-    public BookingJpaRepository(
-            ProductJpaRepository productRepository,
-            SaleInventoryJpaRepository inventoryRepository,
-            AdmissionSequenceJpaRepository admissionSequenceRepository,
-            BookingAdmissionJpaRepository admissionRepository,
-            ReservationJpaRepository reservationRepository,
-            IdempotencyRecordJpaRepository idempotencyRepository,
-            PaymentAttemptJpaRepository paymentAttemptRepository,
-            PointAccountJpaRepository pointAccountRepository,
-            PointHoldJpaRepository pointHoldRepository,
-            ObjectMapper objectMapper
-    ) {
-        this.productRepository = productRepository;
-        this.inventoryRepository = inventoryRepository;
-        this.admissionSequenceRepository = admissionSequenceRepository;
-        this.admissionRepository = admissionRepository;
-        this.reservationRepository = reservationRepository;
-        this.idempotencyRepository = idempotencyRepository;
-        this.paymentAttemptRepository = paymentAttemptRepository;
-        this.pointAccountRepository = pointAccountRepository;
-        this.pointHoldRepository = pointHoldRepository;
-        this.objectMapper = objectMapper;
-    }
 
     public Optional<ProductSummary> findProduct(long productId) {
         return productRepository.findById(productId)
@@ -130,25 +108,76 @@ public class BookingJpaRepository {
             int candidateLimit,
             LocalDateTime now
     ) {
+        return createAdmission(
+                saleEventId,
+                productId,
+                userId,
+                bookingAttemptId,
+                gateMode,
+                redisSeq,
+                candidateLimit,
+                now,
+                true
+        );
+    }
+
+    public AdmissionDecision createLocalQueueAdmission(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId,
+            int candidateLimit,
+            LocalDateTime now
+    ) {
+        return createAdmission(
+                saleEventId,
+                productId,
+                userId,
+                bookingAttemptId,
+                GateMode.LOCAL_QUEUE,
+                null,
+                candidateLimit,
+                now,
+                false
+        );
+    }
+
+    private AdmissionDecision createAdmission(
+            long saleEventId,
+            long productId,
+            long userId,
+            String bookingAttemptId,
+            GateMode gateMode,
+            Long redisSeq,
+            int candidateLimit,
+            LocalDateTime now,
+            boolean requireGateModeMatch
+    ) {
         ensureAdmissionSequence(saleEventId, productId);
         AdmissionSequenceEntity sequence = admissionSequenceRepository
                 .findForUpdate(saleEventId, productId)
                 .orElseThrow();
 
-        if (sequence.getGateMode() != gateMode) {
+        if (requireGateModeMatch && sequence.getGateMode() != gateMode) {
             return AdmissionDecision.rejected(sequence.getGateMode());
         }
         Optional<AdmissionDecision> existing = findAdmission(saleEventId, productId, userId);
         if (existing.isPresent()) {
             return existing.get();
         }
+        if (isConfirmedSoldOut(saleEventId, productId)) {
+            return AdmissionDecision.rejected(gateMode);
+        }
+        if (admissionRepository.countActiveCandidates(saleEventId, productId) >= candidateLimit) {
+            return AdmissionDecision.waitingRoom(redisSeq, 0, gateMode);
+        }
 
-        int updated = admissionSequenceRepository.incrementIfUnderLimit(saleEventId, productId, candidateLimit);
+        int updated = admissionSequenceRepository.increment(saleEventId, productId);
         if (updated != 1) {
             return AdmissionDecision.rejected(gateMode);
         }
         Long dbSeq = admissionSequenceRepository.nextSeq(saleEventId, productId);
-        if (dbSeq == null || dbSeq <= 0 || dbSeq > candidateLimit) {
+        if (dbSeq == null || dbSeq <= 0) {
             return AdmissionDecision.rejected(gateMode);
         }
 
@@ -170,6 +199,12 @@ public class BookingJpaRepository {
             return findAdmission(saleEventId, productId, userId)
                     .orElseThrow(() -> e);
         }
+    }
+
+    private boolean isConfirmedSoldOut(long saleEventId, long productId) {
+        return inventoryRepository.findBySaleEventIdAndProductId(saleEventId, productId)
+                .map(inventory -> inventory.getConfirmedCount() >= inventory.getTotalCount())
+                .orElse(false);
     }
 
     public Optional<AdmissionDecision> findAdmission(long saleEventId, long productId, long userId) {
@@ -238,6 +273,14 @@ public class BookingJpaRepository {
 
     public void markAdmissionWaitingExpired(long admissionId, LocalDateTime now) {
         admissionRepository.markWaitingExpired(admissionId, AdmissionStatus.WAITING_EXPIRED, now);
+    }
+
+    public List<AdmissionRecord> expireWaitingCandidates(LocalDateTime now, int limit) {
+        List<BookingAdmissionEntity> expired = admissionRepository.findExpiredWaitingCandidatesForUpdate(now, limit);
+        for (BookingAdmissionEntity admission : expired) {
+            admissionRepository.markWaitingExpired(admission.getId(), AdmissionStatus.WAITING_EXPIRED, now);
+        }
+        return expired.stream().map(this::toAdmissionRecord).toList();
     }
 
     public Optional<ReservationRecord> findReservationForUpdate(long reservationId) {
@@ -607,6 +650,7 @@ public class BookingJpaRepository {
                 admission.getProductId(),
                 admission.getUserId(),
                 admission.getDbAdmissionSeq(),
+                admission.getRedisSeq(),
                 admission.getStatus(),
                 admission.getBookingAttemptId(),
                 admission.getWaitingExpiresAt()

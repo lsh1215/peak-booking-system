@@ -9,6 +9,7 @@ public record AdmissionRecord(
         long productId,
         long userId,
         Long dbAdmissionSeq,
+        Long redisSeq,
         AdmissionStatus status,
         String bookingAttemptId,
         LocalDateTime waitingExpiresAt

@@ -3,6 +3,8 @@ package com.peakbooking.booking.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +62,7 @@ class BookingApplicationServiceTest {
                 requestHashCalculator,
                 new CombinationPolicy(),
                 admissionService,
+                new LocalWaitingRoom(properties),
                 transactionService,
                 new BookingDbWriteBulkhead(properties),
                 paymentCallGuard,
@@ -123,6 +126,83 @@ class BookingApplicationServiceTest {
         verifyNoInteractions(transactionService, paymentCallGuard);
     }
 
+    @Test
+    void should_keep_new_requests_in_local_queue_until_existing_queue_is_drained_after_redis_recovery() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        AttemptTokenService attemptTokenService = mock(AttemptTokenService.class);
+        CanonicalRequestHashCalculator requestHashCalculator = mock(CanonicalRequestHashCalculator.class);
+        BookingAdmissionService admissionService = mock(BookingAdmissionService.class);
+        BookingTransactionService transactionService = mock(BookingTransactionService.class);
+        PaymentCallGuard paymentCallGuard = mock(PaymentCallGuard.class);
+        BookingProperties properties = propertiesWithBulkhead(6, 5, 1, 2);
+        LocalWaitingRoom localWaitingRoom = new LocalWaitingRoom(properties);
+        Clock clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
+        BookingApplicationService service = new BookingApplicationService(
+                properties,
+                repository,
+                attemptTokenService,
+                requestHashCalculator,
+                new CombinationPolicy(),
+                admissionService,
+                localWaitingRoom,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                paymentCallGuard,
+                new PaymentProcessorRegistry(List.of(
+                        new CreditCardPaymentProcessor(),
+                        new YPayPaymentProcessor(),
+                        new YPointPaymentProcessor()
+                )),
+                clock,
+                Duration.ofSeconds(1)
+        );
+        ProductSummary product = new ProductSummary(
+                1,
+                "Peak Room",
+                10_000,
+                "KRW",
+                LocalDateTime.of(2026, 5, 31, 23, 59),
+                LocalDateTime.of(2026, 6, 2, 15, 0),
+                LocalDateTime.of(2026, 6, 3, 11, 0)
+        );
+        BookingCommand first = command(101, "token-101");
+        BookingCommand second = command(102, "token-102");
+        when(repository.findProduct(1)).thenReturn(Optional.of(product));
+        when(attemptTokenService.verify("token-101", 101, 1, 1))
+                .thenReturn(new AttemptToken("token-101", "attempt-101", 101, 1, 1));
+        when(attemptTokenService.verify("token-102", 102, 1, 1))
+                .thenReturn(new AttemptToken("token-102", "attempt-102", 102, 1, 1));
+        when(requestHashCalculator.hash(first, "attempt-101")).thenReturn("hash-101");
+        when(requestHashCalculator.hash(second, "attempt-102")).thenReturn("hash-102");
+        when(admissionService.admit(1, 1, 101, "attempt-101"))
+                .thenReturn(AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED));
+        when(transactionService.replayExisting("attempt-101", "hash-101")).thenReturn(Optional.empty());
+
+        BookingResult firstResult = service.book(first);
+        BookingResult secondResult = service.book(second);
+
+        assertThat(firstResult.businessCode()).isEqualTo(BookingResult.LOCAL_QUEUE_ACCEPTED);
+        assertThat(secondResult.businessCode()).isEqualTo(BookingResult.LOCAL_QUEUE_ACCEPTED);
+        assertThat(localWaitingRoom.activeCount()).isEqualTo(2);
+        verify(admissionService, times(1)).admit(1, 1, 101, "attempt-101");
+        verify(transactionService, times(1)).replayExisting("attempt-101", "hash-101");
+        verifyNoInteractions(paymentCallGuard);
+    }
+
+    private BookingCommand command(long userId, String token) {
+        return new BookingCommand(
+                userId,
+                1,
+                1,
+                token,
+                PaymentPlan.from(List.of(new PaymentPlanLine(PaymentMethodType.CREDIT_CARD, 10_000))),
+                10_000,
+                "KRW",
+                "v1",
+                MockPgScenario.SUCCESS
+        );
+    }
+
     static BookingProperties propertiesWithBulkhead(
             int bookingWriteConcurrency,
             int pgConfirmConcurrency,
@@ -158,6 +238,14 @@ class BookingApplicationServiceTest {
                 Duration.ofHours(24),
                 Duration.ofMinutes(5),
                 redisFailoverRetryAfter,
+                new BookingProperties.LocalQueue(
+                        true,
+                        2,
+                        1,
+                        Duration.ofMillis(100),
+                        Duration.ofSeconds(30),
+                        Duration.ofSeconds(60)
+                ),
                 new BookingProperties.Bulkhead(
                         bookingWriteConcurrency,
                         pgConfirmConcurrency,

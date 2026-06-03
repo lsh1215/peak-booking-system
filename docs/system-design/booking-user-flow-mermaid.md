@@ -5,7 +5,8 @@
 ## 전제
 
 - 정상 admission은 Redis HA의 Lua script가 담당한다.
-- Redis failover, `WAIT` timeout, min-replica 조건 불만족 시 새 admission은 DB fallback으로 우회하지 않고 `ADMISSION_TEMPORARILY_UNAVAILABLE + Retry-After`로 짧게 pause한다.
+- Redis failover, `WAIT` timeout, min-replica 조건 불만족 시 request thread는 DB fallback으로 직접 우회하지 않고 WAS-local bounded queue에 offer한다.
+- Redis가 복구되어도 local queue가 비거나 drain-grace가 지날 때까지 새 외부 요청은 Redis admission으로 바로 빠져나가지 않는다.
 - 최종 재고 정합성은 MySQL inventory guard와 reservation 상태 전이로 보장한다.
 - PG confirm timeout/unknown은 즉시 성공/실패로 확정하지 않고 `PAYMENT_UNKNOWN`으로 두되, 재고 점유는 `30s` deadline까지만 허용한다.
 - Recovery worker는 기존 WAS 내부에서 작은 thread/batch/concurrency budget으로 실행되며, MySQL lease로 stale `HELD`와 `PAYMENT_UNKNOWN` 중복 처리를 막는다.
@@ -143,6 +144,7 @@ sequenceDiagram
     participant T as Traefik LB / Gateway
     participant A as Spring Boot WAS
     participant R as Redis HA
+    participant Q as Local Queue
     participant D as MySQL
 
     U->>T: POST /bookings
@@ -152,9 +154,15 @@ sequenceDiagram
     R--x A: failover / timeout / replica ACK 부족
 
     A->>D: gate_mode를 REDIS_FAILOVER_PAUSED로 표시
-    A-->>U: ADMISSION_TEMPORARILY_UNAVAILABLE<br/>Retry-After
+    A->>Q: bounded queue offer
+    alt queue accepted
+        A-->>U: 202 LOCAL_QUEUE_ACCEPTED<br/>booking_attempt_id
+        Q->>D: throttled LOCAL_QUEUE admission
+    else queue full
+        A-->>U: LOCAL_QUEUE_FULL<br/>Retry-After
+    end
 
-    Note over A,D: failover 중 새 admission은 MySQL DB fallback으로 우회하지 않음
+    Note over A,D: request thread는 MySQL DB fallback으로 직접 우회하지 않음
     Note over A,R: pause TTL 동안 반복 probe 억제
 
     A->>R: pause TTL 이후 half-open probe<br/>Redis write + WAIT
@@ -164,7 +172,8 @@ sequenceDiagram
     else probe 성공
         R-->>A: write + WAIT success
         A->>D: gate_mode REDIS 복구
-        A-->>U: 이후 요청부터 정상 admission 재개
+        Note over A,Q: queue active_count=0 또는 drain-grace 후 REDIS 재개
+        A-->>U: queue drain 정책 충족 후 정상 admission 재개
     end
 ```
 
@@ -218,8 +227,11 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> ADMITTED: Redis admission + MySQL admission ledger 통과
     [*] --> REDIS_FAILOVER_PAUSED: Redis failover / WAIT timeout
-    REDIS_FAILOVER_PAUSED --> [*]: Retry-After 응답
-    REDIS_FAILOVER_PAUSED --> ADMITTED: half-open probe 성공 후 재시도
+    REDIS_FAILOVER_PAUSED --> LOCAL_QUEUE_ACCEPTED: bounded queue offer 성공
+    REDIS_FAILOVER_PAUSED --> [*]: LOCAL_QUEUE_FULL + Retry-After
+    LOCAL_QUEUE_ACCEPTED --> ADMITTED: throttled worker DB admission
+    LOCAL_QUEUE_ACCEPTED --> [*]: WAS crash 또는 queue expiry trade-off
+    REDIS_FAILOVER_PAUSED --> ADMITTED: half-open probe 성공 + local queue drain 후 재시도
     ADMITTED --> HELD: MySQL inventory guard 성공
     ADMITTED --> WAITING_CANDIDATE: candidate pool 30 내 후순위
     ADMITTED --> REJECTED: admission 거절 또는 매진

@@ -39,6 +39,13 @@ peak-booking:
   redis-failover-retry-after: ${PEAK_BOOKING_REDIS_FAILOVER_RETRY_AFTER:8s}
   redis-wait-replicas: ${PEAK_BOOKING_REDIS_WAIT_REPLICAS:0}
   redis-wait-timeout: ${PEAK_BOOKING_REDIS_WAIT_TIMEOUT:0ms}
+  local-queue:
+    enabled: ${PEAK_BOOKING_LOCAL_QUEUE_ENABLED:true}
+    capacity: ${PEAK_BOOKING_LOCAL_QUEUE_CAPACITY:2000}
+    worker-batch-size: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_BATCH_SIZE:1}
+    worker-fixed-delay: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_FIXED_DELAY:100ms}
+    drain-grace: ${PEAK_BOOKING_LOCAL_QUEUE_DRAIN_GRACE:30s}
+    result-retention: ${PEAK_BOOKING_LOCAL_QUEUE_RESULT_RETENTION:60s}
   bulkhead:
     booking-write-concurrency: ${PEAK_BOOKING_BOOKING_WRITE_CONCURRENCY:6}
     pg-confirm-concurrency: ${PEAK_BOOKING_PG_CONFIRM_CONCURRENCY:5}

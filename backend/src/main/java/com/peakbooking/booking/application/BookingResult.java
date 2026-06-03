@@ -13,6 +13,8 @@ public record BookingResult(
 ) {
 
     public static final String ADMISSION_TEMPORARILY_UNAVAILABLE = "ADMISSION_TEMPORARILY_UNAVAILABLE";
+    public static final String LOCAL_QUEUE_ACCEPTED = "LOCAL_QUEUE_ACCEPTED";
+    public static final String LOCAL_QUEUE_FULL = "LOCAL_QUEUE_FULL";
 
     public boolean terminal() {
         return !retryable;

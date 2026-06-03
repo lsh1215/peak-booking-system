@@ -60,6 +60,34 @@ class BookingAdmissionServiceTest {
     }
 
     @Test
+    void should_keep_waiting_room_user_outside_active_window_without_mysql_admission_write() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 131, 30))
+                .thenReturn(RedisAdmissionGateway.Result.waiting(31, true, 31));
+
+        AdmissionDecision decision = service.admit(1, 1, 131, "attempt-131");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.WAITING_ROOM);
+        assertThat(decision.redisSeq()).isEqualTo(31);
+        assertThat(decision.candidateRank()).isEqualTo(31);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS);
+        verify(redisAdmissionGateway).tryAdmit(1, 1, 131, 30);
+        verifyNoInteractions(transactionService);
+    }
+
+    @Test
     void should_not_consume_redis_candidate_when_admission_persistence_budget_is_full() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);

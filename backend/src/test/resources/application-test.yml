@@ -17,5 +17,7 @@ spring:
       data-locations: optional:classpath:test-data.sql
 
 peak-booking:
+  local-queue:
+    enabled: false
   recovery:
     enabled: false

@@ -100,6 +100,14 @@ class BookingControllerTest {
                 Duration.ofHours(24),
                 Duration.ofMinutes(5),
                 redisFailoverRetryAfter,
+                new BookingProperties.LocalQueue(
+                        true,
+                        2,
+                        1,
+                        Duration.ofMillis(100),
+                        Duration.ofSeconds(30),
+                        Duration.ofSeconds(60)
+                ),
                 new BookingProperties.Bulkhead(6, 5, 1, 2, 16),
                 new BookingProperties.Payment(
                         Duration.ofMillis(500),

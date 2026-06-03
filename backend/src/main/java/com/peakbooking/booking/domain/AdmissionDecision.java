@@ -26,6 +26,10 @@ public record AdmissionDecision(
         );
     }
 
+    public static AdmissionDecision waitingRoom(Long redisSeq, int candidateRank, GateMode gateMode) {
+        return new AdmissionDecision(AdmissionResult.WAITING_ROOM, null, null, redisSeq, candidateRank, gateMode);
+    }
+
     public static AdmissionDecision rejected(GateMode gateMode) {
         return new AdmissionDecision(AdmissionResult.REJECTED, null, null, null, 0, gateMode);
     }

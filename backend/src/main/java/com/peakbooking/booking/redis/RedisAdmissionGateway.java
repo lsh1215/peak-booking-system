@@ -24,17 +24,20 @@ public class RedisAdmissionGateway {
             local queueKey = KEYS[2]
             local seqKey = KEYS[3]
             local userId = ARGV[1]
-            local candidateLimit = tonumber(ARGV[2])
+            local activeLimit = tonumber(ARGV[2])
             local ttlSeconds = tonumber(ARGV[3])
 
             local existing = redis.call('HGET', usersKey, userId)
             if existing then
-                return {'EXISTING', existing}
-            end
-
-            local count = redis.call('ZCARD', queueKey)
-            if count >= candidateLimit then
-                return {'BUSY', '0'}
+                local rank = redis.call('ZRANK', queueKey, userId)
+                if not rank then
+                    return {'REJECTED', '0', '0'}
+                end
+                local candidateRank = rank + 1
+                if candidateRank <= activeLimit then
+                    return {'ACTIVE_EXISTING', existing, tostring(candidateRank)}
+                end
+                return {'WAITING_EXISTING', existing, tostring(candidateRank)}
             end
 
             local seq = redis.call('INCR', seqKey)
@@ -43,7 +46,15 @@ public class RedisAdmissionGateway {
             redis.call('EXPIRE', usersKey, ttlSeconds)
             redis.call('EXPIRE', queueKey, ttlSeconds)
             redis.call('EXPIRE', seqKey, ttlSeconds)
-            return {'ADMITTED', tostring(seq)}
+            local rank = redis.call('ZRANK', queueKey, userId)
+            if not rank then
+                return {'REJECTED', '0', '0'}
+            end
+            local candidateRank = rank + 1
+            if candidateRank <= activeLimit then
+                return {'ACTIVE_NEW', tostring(seq), tostring(candidateRank)}
+            end
+            return {'WAITING_NEW', tostring(seq), tostring(candidateRank)}
             """;
     private static final String COMPENSATE_LUA = """
             local usersKey = KEYS[1]
@@ -93,25 +104,26 @@ public class RedisAdmissionGateway {
                     bytes(userId),
                     bytes(candidateLimit),
                     bytes(Duration.ofHours(24).toSeconds())
-	            );
-	            if (newAdmissionWasWritten(result) && waitReplicas > 0) {
-	                try {
-	                    waitForReplicas(connection);
-	                } catch (ReplicationNotConfirmedException replicationFailure) {
-	                    throw replicationFailure;
-	                } catch (RuntimeException waitFailure) {
+            );
+            if (newAdmissionWasWritten(result) && waitReplicas > 0) {
+                try {
+                    waitForReplicas(connection);
+                } catch (ReplicationNotConfirmedException replicationFailure) {
+                    throw replicationFailure;
+                } catch (RuntimeException waitFailure) {
                     throw new ReplicationNotConfirmedException(waitReplicas, -1, waitFailure);
                 }
             }
             return result;
         });
-        if (response == null || response.size() != 2) {
+        if (response == null || response.size() != 3) {
             throw new IllegalStateException("Unexpected Redis admission response");
         }
         String status = stringValue(response.get(0));
-        boolean admitted = "ADMITTED".equals(status) || "EXISTING".equals(status);
+        boolean admitted = "ACTIVE_NEW".equals(status) || "ACTIVE_EXISTING".equals(status);
         long seq = Long.parseLong(stringValue(response.get(1)));
-        return new Result(admitted, seq, "ADMITTED".equals(status));
+        int candidateRank = Integer.parseInt(stringValue(response.get(2)));
+        return new Result(admitted, seq, "ACTIVE_NEW".equals(status) || "WAITING_NEW".equals(status), candidateRank);
     }
 
     public boolean isAdmissionPaused(long productId, long saleEventId) {
@@ -124,6 +136,10 @@ public class RedisAdmissionGateway {
     }
 
     public boolean compensateAdmission(long productId, long saleEventId, long userId, long redisSeq) {
+        return releaseAdmission(productId, saleEventId, userId, redisSeq);
+    }
+
+    public boolean releaseAdmission(long productId, long saleEventId, long userId, long redisSeq) {
         String prefix = admissionPrefix(productId, saleEventId);
         Long result = redisTemplate.execute((RedisCallback<Long>) connection -> {
             Object value = connection.eval(
@@ -172,7 +188,11 @@ public class RedisAdmissionGateway {
     }
 
     private boolean newAdmissionWasWritten(List<?> response) {
-        return response != null && !response.isEmpty() && "ADMITTED".equals(stringValue(response.get(0)));
+        if (response == null || response.isEmpty()) {
+            return false;
+        }
+        String status = stringValue(response.get(0));
+        return "ACTIVE_NEW".equals(status) || "WAITING_NEW".equals(status);
     }
 
     private void waitForReplicas(org.springframework.data.redis.connection.RedisConnection connection) {
@@ -228,10 +248,22 @@ public class RedisAdmissionGateway {
         return String.valueOf(value);
     }
 
-    public record Result(boolean admitted, long redisSeq, boolean newlyCreated) {
+    public record Result(boolean admitted, long redisSeq, boolean newlyCreated, int candidateRank) {
 
         public Result(boolean admitted, long redisSeq) {
-            this(admitted, redisSeq, false);
+            this(admitted, redisSeq, false, admitted ? Math.toIntExact(redisSeq) : 0);
+        }
+
+        public Result(boolean admitted, long redisSeq, boolean newlyCreated) {
+            this(admitted, redisSeq, newlyCreated, admitted ? Math.toIntExact(redisSeq) : 0);
+        }
+
+        public static Result waiting(long redisSeq, boolean newlyCreated, int candidateRank) {
+            return new Result(false, redisSeq, newlyCreated, candidateRank);
+        }
+
+        public boolean waitingRoom() {
+            return !admitted && redisSeq > 0 && candidateRank > 0;
         }
     }
 

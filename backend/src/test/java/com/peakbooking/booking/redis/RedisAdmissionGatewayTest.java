@@ -31,13 +31,33 @@ class RedisAdmissionGatewayTest {
         BaseRedisAsyncCommands<byte[], byte[]> commands = nativeCommands(connection, 1L);
         StringRedisTemplate redisTemplate = redisTemplate(connection);
         when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
-                .thenReturn(List.of(bytes("ADMITTED"), bytes("7")));
+                .thenReturn(List.of(bytes("ACTIVE_NEW"), bytes("7"), bytes("7")));
         RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
 
         RedisAdmissionGateway.Result result = gateway.tryAdmit(1, 1, 101, 30);
 
         assertThat(result.admitted()).isTrue();
         assertThat(result.redisSeq()).isEqualTo(7);
+        assertThat(result.newlyCreated()).isTrue();
+        assertThat(result.candidateRank()).isEqualTo(7);
+        verify(commands).waitForReplication(1, 100);
+    }
+
+    @Test
+    void should_wait_for_replicas_after_new_waiting_room_write() throws Exception {
+        RedisConnection connection = mock(RedisConnection.class);
+        BaseRedisAsyncCommands<byte[], byte[]> commands = nativeCommands(connection, 1L);
+        StringRedisTemplate redisTemplate = redisTemplate(connection);
+        when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
+                .thenReturn(List.of(bytes("WAITING_NEW"), bytes("31"), bytes("31")));
+        RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
+
+        RedisAdmissionGateway.Result result = gateway.tryAdmit(1, 1, 131, 30);
+
+        assertThat(result.admitted()).isFalse();
+        assertThat(result.waitingRoom()).isTrue();
+        assertThat(result.redisSeq()).isEqualTo(31);
+        assertThat(result.candidateRank()).isEqualTo(31);
         assertThat(result.newlyCreated()).isTrue();
         verify(commands).waitForReplication(1, 100);
     }
@@ -48,7 +68,7 @@ class RedisAdmissionGatewayTest {
         nativeCommands(connection, 0L);
         StringRedisTemplate redisTemplate = redisTemplate(connection);
         when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
-                .thenReturn(List.of(bytes("ADMITTED"), bytes("7")));
+                .thenReturn(List.of(bytes("ACTIVE_NEW"), bytes("7"), bytes("7")));
         RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
 
         assertThatThrownBy(() -> gateway.tryAdmit(1, 1, 101, 30))
@@ -62,7 +82,7 @@ class RedisAdmissionGatewayTest {
         nativeCommandsFailure(connection, new QueryTimeoutException("wait timed out"));
         StringRedisTemplate redisTemplate = redisTemplate(connection);
         when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
-                .thenReturn(List.of(bytes("ADMITTED"), bytes("7")));
+                .thenReturn(List.of(bytes("ACTIVE_NEW"), bytes("7"), bytes("7")));
         RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(50));
 
         assertThatThrownBy(() -> gateway.tryAdmit(1, 1, 101, 30))
@@ -78,13 +98,34 @@ class RedisAdmissionGatewayTest {
         when(connection.getNativeConnection()).thenReturn(commands);
         StringRedisTemplate redisTemplate = redisTemplate(connection);
         when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
-                .thenReturn(List.of(bytes("EXISTING"), bytes("7")));
+                .thenReturn(List.of(bytes("ACTIVE_EXISTING"), bytes("7"), bytes("7")));
         RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
 
         RedisAdmissionGateway.Result result = gateway.tryAdmit(1, 1, 101, 30);
 
         assertThat(result.admitted()).isTrue();
         assertThat(result.redisSeq()).isEqualTo(7);
+        assertThat(result.newlyCreated()).isFalse();
+        assertThat(result.candidateRank()).isEqualTo(7);
+        verify(commands, never()).waitForReplication(any(Integer.class), any(Long.class));
+    }
+
+    @Test
+    void should_not_wait_when_existing_waiting_room_entry_is_returned_without_new_write() {
+        RedisConnection connection = mock(RedisConnection.class);
+        BaseRedisAsyncCommands<byte[], byte[]> commands = mock(BaseRedisAsyncCommands.class);
+        when(connection.getNativeConnection()).thenReturn(commands);
+        StringRedisTemplate redisTemplate = redisTemplate(connection);
+        when(connection.eval(any(byte[].class), eq(ReturnType.MULTI), eq(3), any(byte[][].class)))
+                .thenReturn(List.of(bytes("WAITING_EXISTING"), bytes("31"), bytes("31")));
+        RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 1, Duration.ofMillis(100));
+
+        RedisAdmissionGateway.Result result = gateway.tryAdmit(1, 1, 131, 30);
+
+        assertThat(result.admitted()).isFalse();
+        assertThat(result.waitingRoom()).isTrue();
+        assertThat(result.redisSeq()).isEqualTo(31);
+        assertThat(result.candidateRank()).isEqualTo(31);
         assertThat(result.newlyCreated()).isFalse();
         verify(commands, never()).waitForReplication(any(Integer.class), any(Long.class));
     }
