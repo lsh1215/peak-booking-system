@@ -4,9 +4,9 @@
 
 ## 전제
 
-- 정상 admission은 Redis HA의 Lua script가 담당한다.
+- 정상 후보 판단은 Redis HA의 Lua script가 담당한다.
 - Redis failover, `WAIT` timeout, min-replica 조건 불만족 시 request thread는 DB fallback으로 직접 우회하지 않고 WAS-local bounded queue에 offer한다.
-- Redis가 복구되어도 local queue가 비거나 drain-grace가 지날 때까지 새 외부 요청은 Redis admission으로 바로 빠져나가지 않는다.
+- Redis가 복구되어도 local queue가 비거나 drain-grace가 지날 때까지 새 외부 요청은 Redis 경로로 바로 빠져나가지 않는다.
 - 최종 재고 정합성은 MySQL inventory guard와 reservation 상태 전이로 보장한다.
 - PG confirm timeout/unknown은 즉시 성공/실패로 확정하지 않고 `PAYMENT_UNKNOWN`으로 두되, 재고 점유는 `30s` deadline까지만 허용한다.
 - Recovery worker는 기존 WAS 내부에서 작은 thread/batch/concurrency budget으로 실행되며, MySQL lease로 stale `HELD`와 `PAYMENT_UNKNOWN` 중복 처리를 막는다.
@@ -23,7 +23,7 @@ sequenceDiagram
     participant U as 사용자
     participant T as Traefik LB / Gateway
     participant A as Spring Boot WAS
-    participant R as Redis HA Admission
+    participant R as Redis HA Candidate Gate
     participant D as MySQL
     participant P as Mock PG
 
@@ -32,13 +32,14 @@ sequenceDiagram
     T->>A: 요청 전달
 
     A->>A: booking_attempt_id / request_hash 확인
-    A->>R: Lua admission<br/>duplicate check + seq 발급 + candidate 기록
-    A->>R: 새 admission이면 WAIT 1 short timeout
-    R-->>A: admitted(seq) 또는 rejected
+    A->>R: Lua 후보 판단<br/>duplicate check + redisSeq 발급 + candidate 기록
+    A->>R: 새 후보이면 WAIT 1 short timeout
+    R-->>A: candidate accepted 또는 rejected
 
-    alt Redis admission rejected
+    alt Redis 후보 rejected
         A-->>U: 매진/대기 후보 아님 응답
-    else Redis admission admitted
+    else Redis 후보 accepted
+        A->>D: booking_admission 저장<br/>DB 확정 순서 발급
         A->>D: reservation 생성 시도<br/>inventory conditional guard
         D-->>A: HELD / WAITING_CANDIDATE / rejected
 
@@ -73,11 +74,12 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start["사용자가 예약/결제 요청"] --> Admission["Admission 통과 여부 확인"]
-    Admission -->|거절| Reject["즉시 실패 응답"]
-    Admission -->|통과| Hold["MySQL reservation HELD"]
-    Admission -->|후순위 후보<br/>pool 30 안| Candidate["WAITING_CANDIDATE<br/>최대 60s"]
-    Admission -->|pool 30 밖| Reject
+    Start["사용자가 예약/결제 요청"] --> CandidateGate["Redis 후보 판단"]
+    CandidateGate -->|거절| Reject["즉시 실패 응답"]
+    CandidateGate -->|후보 accepted| Ledger["MySQL 예약 접수 원장<br/>DB 확정 순서 저장"]
+    Ledger -->|재고 점유 성공| Hold["MySQL reservation HELD"]
+    Ledger -->|후순위 후보<br/>pool 30 안| Candidate["WAITING_CANDIDATE<br/>최대 60s"]
+    Ledger -->|pool 30 밖 또는 매진| Reject
     Candidate -->|60s 안에 release 발생| Hold
     Candidate -->|60s 초과| WaitExpired["대기 종료 응답"]
     Hold --> Confirm["PG confirm 호출"]
@@ -113,9 +115,9 @@ sequenceDiagram
     T->>T: health check로 WAS-1 제외
     T->>A2: 살아있는 WAS-2로 전달
 
-    A2->>R: Redis Lua admission + WAIT
-    R-->>A2: admitted(seq)
-    A2->>D: reservation 생성 + inventory guard
+    A2->>R: Redis Lua 후보 판단 + WAIT
+    R-->>A2: candidate accepted
+    A2->>D: booking_admission 저장 + inventory guard
     D-->>A2: HELD
     A2->>P: confirm payment
 
@@ -150,14 +152,19 @@ sequenceDiagram
     U->>T: POST /bookings
     T->>A: 요청 전달
 
-    A->>R: Redis Lua admission + WAIT
+    A->>R: Redis Lua 후보 판단 + WAIT
     R--x A: failover / timeout / replica ACK 부족
 
-    A->>D: gate_mode를 REDIS_FAILOVER_PAUSED로 표시
+    A->>A: circuit open / local queue mode
     A->>Q: bounded queue offer
     alt queue accepted
         A-->>U: 202 LOCAL_QUEUE_ACCEPTED<br/>booking_attempt_id
-        Q->>D: throttled LOCAL_QUEUE admission
+        Q->>D: throttled worker<br/>booking_admission(gate_mode=LOCAL_QUEUE) 저장
+        alt transient DB busy / timeout
+            Q->>Q: retry/backoff 후 재큐잉
+        else retry budget 초과
+            Q->>D: terminal unavailable 기록
+        end
     else queue full
         A-->>U: LOCAL_QUEUE_FULL<br/>Retry-After
     end
@@ -171,9 +178,8 @@ sequenceDiagram
         A-->>U: Retry-After 유지
     else probe 성공
         R-->>A: write + WAIT success
-        A->>D: gate_mode REDIS 복구
         Note over A,Q: queue active_count=0 또는 drain-grace 후 REDIS 재개
-        A-->>U: queue drain 정책 충족 후 정상 admission 재개
+        A-->>U: queue drain 정책 충족 후 정상 후보 판단 재개
     end
 ```
 
@@ -225,16 +231,18 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ADMITTED: Redis admission + MySQL admission ledger 통과
+    [*] --> REDIS_CANDIDATE: Redis 후보 판단 + WAIT
+    REDIS_CANDIDATE --> ADMITTED: MySQL 예약 접수 원장 저장
+    REDIS_CANDIDATE --> REJECTED: 후보 거절 또는 WAIT 실패
     [*] --> REDIS_FAILOVER_PAUSED: Redis failover / WAIT timeout
     REDIS_FAILOVER_PAUSED --> LOCAL_QUEUE_ACCEPTED: bounded queue offer 성공
     REDIS_FAILOVER_PAUSED --> [*]: LOCAL_QUEUE_FULL + Retry-After
-    LOCAL_QUEUE_ACCEPTED --> ADMITTED: throttled worker DB admission
+    LOCAL_QUEUE_ACCEPTED --> ADMITTED: throttled worker DB 예약 접수 원장 저장
     LOCAL_QUEUE_ACCEPTED --> [*]: WAS crash 또는 queue expiry trade-off
-    REDIS_FAILOVER_PAUSED --> ADMITTED: half-open probe 성공 + local queue drain 후 재시도
+    REDIS_FAILOVER_PAUSED --> REDIS_CANDIDATE: half-open probe 성공 + local queue drain 후 재시도
     ADMITTED --> HELD: MySQL inventory guard 성공
     ADMITTED --> WAITING_CANDIDATE: candidate pool 30 내 후순위
-    ADMITTED --> REJECTED: admission 거절 또는 매진
+    ADMITTED --> REJECTED: 매진 또는 후보 종료
     WAITING_CANDIDATE --> HELD: 60s 안에 선순위 release
     WAITING_CANDIDATE --> WAITING_EXPIRED: 60s 초과
     HELD --> CONFIRMED: PG confirm success

@@ -17,20 +17,6 @@
 | 요구사항 출처 | `docs/requirements.md` |
 | 관련 문서 | `docs/decisions/DECISIONS.md`, `docs/system-design/mock-interview.md`, `docs/testing/loadtest-evidence-index.md` |
 
-### 0.1 변경 이력
-
-| 버전 | 날짜 | 작성자 | 변경 사항 |
-|---|---|---|---|
-| 0.1 | 2026-05-30 | Sanghun Lee + Codex | 기존 요구사항에서 FR/NFR을 최초 추출 |
-| 0.2 | 2026-05-30 | Sanghun Lee + Codex | 템플릿용 빈 섹션을 제거하고 Mermaid 다이어그램 추가 |
-| 0.3 | 2026-05-30 | Sanghun Lee + Codex | 현재 추출 요구사항에 맞게 재정렬하고 미승인 선택을 open decision으로 낮춤 |
-| 0.4 | 2026-05-30 | Sanghun Lee + Codex | 고정 재고 10개, Y페이/Y포인트, 제한된 scale-up/out, source-backed Mock PG 가정 추가 |
-| 0.5 | 2026-05-31 | Sanghun Lee + Codex | DB 확정 순서 기준 공정성, Traefik 1차 방어, Redis 장애 시 bounded DB fallback 후보를 기록 |
-| 0.6 | 2026-05-31 | Sanghun Lee + Codex | Alternatives Considered, Deployment Strategy, Monitoring Strategy 섹션을 추가 |
-| 0.7 | 2026-06-01 | Sanghun Lee + Codex | `PAYMENT_UNKNOWN` 재고 점유 deadline, stale `HELD` recovery, SDD ERD/stale pending 문구 정리 |
-| 0.8 | 2026-06-03 | Sanghun Lee + Codex | Redis 단일 인스턴스/DB fallback 후보를 Redis HA + failover pause + half-open recovery 구조로 변경 |
-| 0.9 | 2026-06-03 | Sanghun Lee + Codex | failover 중 503 pause를 WAS-local bounded queue + throttled worker + drain-grace 복구 정책으로 변경 |
-
 ---
 
 ## 1. 소개
