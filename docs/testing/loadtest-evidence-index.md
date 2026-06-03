@@ -41,7 +41,7 @@
 | 구분 | 명령 | 비고 |
 |---|---|---|
 | v1 기존 결과 | 보관된 실행 로그 기준 | `loadtest-results/V1/LOADTEST_ANALYSIS.md` 참고 |
-| 수정 후 결과 | `BASE_URL=http://34.64.61.68 SCENARIO=<scenario> RATE=<rate> DURATION=<duration> k6 run k6/booking-resilience.js` | 각 시나리오 전 원격 MySQL/Redis reset 검증. 배포 이미지 `peak-booking/backend:loadtest-20260603-210017` |
+| 수정 후 결과 | `BASE_URL=<loadtest-target> SCENARIO=<scenario> RATE=<rate> DURATION=<duration> k6 run k6/booking-resilience.js` | 각 시나리오 전 원격 MySQL/Redis reset 검증. 배포 이미지 `peak-booking/backend:loadtest-20260603-210017` |
 
 ## 원시 결과 위치
 
