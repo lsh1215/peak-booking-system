@@ -1,0 +1,82 @@
+NAME                               READY   STATUS    RESTARTS       AGE     IP           NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-75f674687c-7p5r5   1/1     Running   0              5m19s   10.42.1.35   peak-booking-k3s-20260601122904-was-1   <none>           <none>
+booking-service-75f674687c-lxsh2   1/1     Running   0              6m10s   10.42.2.31   peak-booking-k3s-20260601122904-was-2   <none>           <none>
+legacy-db-load                     1/1     Running   0              2m18s   10.42.3.14   peak-booking-k3s-20260601122904-mysql   <none>           <none>
+lgtm-5d8445656b-lwrqm              1/1     Running   1 (33m ago)    106m    10.42.6.12   peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (157m ago)   4h50m   10.42.3.13   peak-booking-k3s-20260601122904-mysql   <none>           <none>
+---TOP-PODS---
+NAME                               CPU(cores)   MEMORY(bytes)   
+booking-service-75f674687c-7p5r5   999m         473Mi           
+booking-service-75f674687c-lxsh2   1001m        455Mi           
+legacy-db-load                     789m         3Mi             
+lgtm-5d8445656b-lwrqm              648m         2243Mi          
+mysql-0                            338m         676Mi           
+---TOP-NODES---
+NAME                                    CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+peak-booking-k3s-20260601122904         464m         23%      1621Mi          20%         
+peak-booking-k3s-20260601122904-lgtm    564m         28%      2857Mi          35%         
+peak-booking-k3s-20260601122904-mysql   1137m        56%      1278Mi          16%         
+peak-booking-k3s-20260601122904-redis   16m          0%       612Mi           7%          
+peak-booking-k3s-20260601122904-was-1   1030m        51%      1149Mi          14%         
+peak-booking-k3s-20260601122904-was-2   972m         48%      1146Mi          14%         
+---EVENTS---
+13m         Normal    Started             pod/booking-service-6bb8cf89fc-kptcr    Container started
+12m         Warning   Unhealthy           pod/booking-service-6bb8cf89fc-kptcr    Startup probe failed: Get "http://10.42.2.30:8080/actuator/health/liveness": dial tcp 10.42.2.30:8080: connect: connection refused
+12m         Normal    SuccessfulDelete    replicaset/booking-service-67bdc6bb85   Deleted pod: booking-service-67bdc6bb85-wsp4q
+12m         Normal    SuccessfulCreate    replicaset/booking-service-6bb8cf89fc   Created pod: booking-service-6bb8cf89fc-rgc2f
+12m         Warning   Unhealthy           pod/booking-service-67bdc6bb85-wsp4q    Readiness probe failed: Get "http://10.42.1.33:8080/actuator/health/readiness": dial tcp 10.42.1.33:8080: connect: connection refused
+12m         Normal    Killing             pod/booking-service-67bdc6bb85-wsp4q    Stopping container booking-service
+12m         Normal    Created             pod/booking-service-6bb8cf89fc-rgc2f    Container created
+12m         Normal    Pulled              pod/booking-service-6bb8cf89fc-rgc2f    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+12m         Normal    Started             pod/booking-service-6bb8cf89fc-rgc2f    Container started
+12m         Normal    Pulled              pod/booking-service-6bb8cf89fc-rgc2f    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+12m         Normal    Created             pod/booking-service-6bb8cf89fc-rgc2f    Container created
+12m         Normal    Started             pod/booking-service-6bb8cf89fc-rgc2f    Container started
+11m         Warning   Unhealthy           pod/booking-service-6bb8cf89fc-rgc2f    Startup probe failed: Get "http://10.42.1.34:8080/actuator/health/liveness": dial tcp 10.42.1.34:8080: connect: connection refused
+11m         Warning   Unhealthy           pod/booking-service-6bb8cf89fc-rgc2f    Readiness probe failed: HTTP probe failed with statuscode: 503
+10m         Normal    SuccessfulDelete    replicaset/redis-86cc94f748             Deleted pod: redis-86cc94f748-zdqdr
+10m         Normal    Killing             pod/redis-86cc94f748-zdqdr              Stopping container redis-exporter
+10m         Normal    Killing             pod/redis-86cc94f748-zdqdr              Stopping container redis
+8m29s       Warning   Failed              pod/legacy-db-load                      Failed to pull image "mysql:8.4": rpc error: code = DeadlineExceeded desc = failed to pull and unpack image "docker.io/library/mysql:8.4": failed to resolve reference "docker.io/library/mysql:8.4": failed to do request: Head "https://registry-1.docker.io/v2/library/mysql/manifests/8.4": dial tcp 3.216.216.166:443: i/o timeout
+8m17s       Warning   Failed              pod/legacy-db-load                      Error: ImagePullBackOff
+8m17s       Normal    BackOff             pod/legacy-db-load                      Back-off pulling image "mysql:8.4"
+8m5s        Normal    Pulling             pod/legacy-db-load                      Pulling image "mysql:8.4"
+7m35s       Warning   Failed              pod/legacy-db-load                      Failed to pull image "mysql:8.4": rpc error: code = DeadlineExceeded desc = failed to pull and unpack image "docker.io/library/mysql:8.4": failed to resolve reference "docker.io/library/mysql:8.4": failed to do request: Head "https://registry-1.docker.io/v2/library/mysql/manifests/8.4": dial tcp 18.235.97.30:443: i/o timeout
+7m35s       Warning   Failed              pod/legacy-db-load                      Error: ErrImagePull
+7m19s       Normal    ScalingReplicaSet   deployment/redis                        Scaled up replica set redis-86cc94f748 from 0 to 1
+7m18s       Normal    Pulled              pod/redis-86cc94f748-glf7v              Container image "redis:7.4-alpine" already present on machine and can be accessed by the pod
+7m18s       Normal    Created             pod/redis-86cc94f748-glf7v              Container created
+7m18s       Normal    SuccessfulCreate    replicaset/redis-86cc94f748             Created pod: redis-86cc94f748-glf7v
+7m18s       Normal    Started             pod/redis-86cc94f748-glf7v              Container started
+7m18s       Normal    Created             pod/redis-86cc94f748-glf7v              Container created
+7m18s       Normal    Pulled              pod/redis-86cc94f748-glf7v              Container image "oliver006/redis_exporter:v1.67.0" already present on machine and can be accessed by the pod
+7m18s       Normal    Started             pod/redis-86cc94f748-glf7v              Container started
+6m11s       Normal    Killing             pod/booking-service-6bb8cf89fc-kptcr    Stopping container booking-service
+6m11s       Normal    SuccessfulDelete    replicaset/booking-service-6bb8cf89fc   Deleted pod: booking-service-6bb8cf89fc-kptcr
+6m11s       Normal    SuccessfulCreate    replicaset/booking-service-75f674687c   Created pod: booking-service-75f674687c-lxsh2
+6m10s       Normal    Pulled              pod/booking-service-75f674687c-lxsh2    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+6m10s       Normal    Created             pod/booking-service-75f674687c-lxsh2    Container created
+6m10s       Normal    Started             pod/booking-service-75f674687c-lxsh2    Container started
+6m9s        Normal    Created             pod/booking-service-75f674687c-lxsh2    Container created
+6m9s        Normal    Pulled              pod/booking-service-75f674687c-lxsh2    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+6m9s        Normal    Started             pod/booking-service-75f674687c-lxsh2    Container started
+5m26s       Warning   Unhealthy           pod/booking-service-75f674687c-lxsh2    Startup probe failed: Get "http://10.42.2.31:8080/actuator/health/liveness": dial tcp 10.42.2.31:8080: connect: connection refused
+5m20s       Normal    SuccessfulCreate    replicaset/booking-service-75f674687c   Created pod: booking-service-75f674687c-7p5r5
+5m20s       Normal    ScalingReplicaSet   deployment/booking-service              (combined from similar events): Scaled up replica set booking-service-75f674687c from 1 to 2
+5m20s       Normal    Killing             pod/booking-service-6bb8cf89fc-rgc2f    Stopping container booking-service
+5m20s       Normal    SuccessfulDelete    replicaset/booking-service-6bb8cf89fc   Deleted pod: booking-service-6bb8cf89fc-rgc2f
+5m19s       Normal    Created             pod/booking-service-75f674687c-7p5r5    Container created
+5m19s       Normal    Pulled              pod/booking-service-75f674687c-7p5r5    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+5m18s       Normal    Pulled              pod/booking-service-75f674687c-7p5r5    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+5m18s       Normal    Created             pod/booking-service-75f674687c-7p5r5    Container created
+5m18s       Normal    Started             pod/booking-service-75f674687c-7p5r5    Container started
+5m17s       Normal    Started             pod/booking-service-75f674687c-7p5r5    Container started
+4m34s       Warning   Unhealthy           pod/booking-service-75f674687c-7p5r5    Startup probe failed: Get "http://10.42.1.35:8080/actuator/health/liveness": dial tcp 10.42.1.35:8080: connect: connection refused
+4m27s       Warning   Unhealthy           pod/booking-service-75f674687c-7p5r5    Readiness probe failed: HTTP probe failed with statuscode: 503
+2m56s       Normal    Killing             pod/redis-86cc94f748-glf7v              Stopping container redis
+2m56s       Normal    SuccessfulDelete    replicaset/redis-86cc94f748             Deleted pod: redis-86cc94f748-glf7v
+2m56s       Normal    ScalingReplicaSet   deployment/redis                        Scaled down replica set redis-86cc94f748 from 1 to 0
+2m56s       Normal    Killing             pod/redis-86cc94f748-glf7v              Stopping container redis-exporter
+2m19s       Normal    Started             pod/legacy-db-load                      Container started
+2m19s       Normal    Created             pod/legacy-db-load                      Container created
+2m19s       Normal    Pulled              pod/legacy-db-load                      Container image "mysql:8.4" already present on machine and can be accessed by the pod

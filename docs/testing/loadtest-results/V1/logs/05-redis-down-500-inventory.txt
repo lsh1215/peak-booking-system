@@ -1,0 +1,9 @@
+total_count	reserved_count	payment_unknown_count	confirmed_count	occupied_count
+10	0	0	10	10
+gate_mode	status	cnt	min_redis_seq	max_redis_seq	min_db_admission_seq	max_db_admission_seq
+DB_FALLBACK	SUCCEEDED	10	NULL	NULL	1	10
+DB_FALLBACK	WAITING_CANDIDATE	20	NULL	NULL	11	30
+status	cnt
+CONFIRMED	10
+status	cnt
+CONFIRMED	10

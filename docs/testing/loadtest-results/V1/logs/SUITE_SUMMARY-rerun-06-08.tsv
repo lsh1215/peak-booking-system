@@ -1,0 +1,2 @@
+scenario	exit_code	http_failed_rate	dropped_iterations	iterations	booking_p95_ms	checkout_p95_ms	technical_failure_rate	db_confirmed	db_occupied
+06-mixed-500-rerun	0	0	0	30000	215.59359999999995	101.69984999999997	0	9	9

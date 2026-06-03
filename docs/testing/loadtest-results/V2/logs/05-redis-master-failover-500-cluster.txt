@@ -1,0 +1,29 @@
+NAME                               READY   STATUS    RESTARTS      AGE    IP            NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-755b44dcb4-jqnmj   1/1     Running   0             5m3s   10.42.1.50    peak-booking-k3s-20260601122904-was-1   <none>           <none>
+booking-service-755b44dcb4-r4w9b   1/1     Running   0             145m   10.42.2.42    peak-booking-k3s-20260601122904-was-2   <none>           <none>
+lgtm-57d7c78ff7-skrbj              1/1     Running   0             10h    10.42.6.15    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (14h ago)   17h    10.42.3.13    peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-966465b4f-m27b5              2/2     Running   0             138m   10.42.5.117   peak-booking-k3s-20260601122904-redis   <none>           <none>
+redis-replica-875f5cdfb-lllx8      1/1     Running   0             138m   10.42.6.87    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-replica-875f5cdfb-xxgl4      1/1     Running   0             138m   10.42.0.210   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-6bv6m    1/1     Running   0             138m   10.42.0.211   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-mnz7h    1/1     Running   0             138m   10.42.6.88    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-sentinel-65bd976ff4-rhqwc    1/1     Running   0             138m   10.42.5.118   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---ROLL_OUT---
+deployment "booking-service" successfully rolled out
+---EVENTS---
+LAST SEEN   TYPE      REASON              OBJECT                                  MESSAGE
+5m3s        Normal    Scheduled           pod/booking-service-755b44dcb4-jqnmj    Successfully assigned peak-booking/booking-service-755b44dcb4-jqnmj to peak-booking-k3s-20260601122904-was-1
+8m18s       Normal    Killing             pod/booking-service-755b44dcb4-v56xp    Stopping container booking-service
+8m18s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-755b44dcb4 from 2 to 1
+8m18s       Normal    SuccessfulDelete    replicaset/booking-service-755b44dcb4   Deleted pod: booking-service-755b44dcb4-v56xp
+5m3s        Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-755b44dcb4 from 1 to 2
+5m3s        Normal    SuccessfulCreate    replicaset/booking-service-755b44dcb4   Created pod: booking-service-755b44dcb4-jqnmj
+5m2s        Normal    Started             pod/booking-service-755b44dcb4-jqnmj    Container started
+5m2s        Normal    Created             pod/booking-service-755b44dcb4-jqnmj    Container created
+5m2s        Normal    Pulled              pod/booking-service-755b44dcb4-jqnmj    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+5m1s        Normal    Created             pod/booking-service-755b44dcb4-jqnmj    Container created
+5m1s        Normal    Pulled              pod/booking-service-755b44dcb4-jqnmj    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+5m          Normal    Started             pod/booking-service-755b44dcb4-jqnmj    Container started
+4m12s       Warning   Unhealthy           pod/booking-service-755b44dcb4-jqnmj    Startup probe failed: Get "http://10.42.1.50:8080/actuator/health/liveness": dial tcp 10.42.1.50:8080: connect: connection refused
+57s         Warning   Unhealthy           pod/booking-service-755b44dcb4-jqnmj    Liveness probe failed: Get "http://10.42.1.50:8080/actuator/health/liveness": context deadline exceeded (Client.Timeout exceeded while awaiting headers)

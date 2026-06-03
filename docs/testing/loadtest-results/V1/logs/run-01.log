@@ -1,0 +1,35 @@
+RUN_DIR=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures
+APP_URL=http://34.64.61.68
+SCENARIO=01-peak-1000 isolated
+START_LOG_UTC=2026-06-02T18:48:36Z
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/booking-service-55648db7fd-s6s8z condition met
+pod/redis-86cc94f748-8h299 condition met
+SNAPSHOT 01-peak-1000-pre
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+TEST_START_UTC=2026-06-02T18:51:22Z
+CAPTURE 01-peak-1000-before from=1780426252754 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426252754&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426252754&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-before-bottleneck.png'
+CAPTURE 01-peak-1000-mid from=1780426252754 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426252754&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426252754&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-mid-bottleneck.png'
+TEST_END_UTC=2026-06-02T18:52:23Z
+01-peak-1000 exit=0
+CAPTURE 01-peak-1000-after from=1780426252754 to=1780426373336
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426252754&to=1780426373336&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426252754&to=1780426373336&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/01-peak-1000-after-bottleneck.png'
+SNAPSHOT 01-peak-1000
+DONE 01-peak-1000 exit=0 dir=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures

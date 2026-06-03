@@ -1,0 +1,2 @@
+total_count	reserved_count	payment_unknown_count	confirmed_count	occupied_count
+10	0	0	0	0

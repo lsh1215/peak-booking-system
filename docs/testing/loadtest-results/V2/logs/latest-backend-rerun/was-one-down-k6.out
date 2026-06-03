@@ -1,0 +1,117 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: k6/booking-resilience.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 300 max VUs, 1m0s max duration (incl. graceful stop):
+              * was-one-down: 100.00 iterations/s for 30s (maxVUs: 100-300, gracefulStop: 30s)
+
+
+running (0m01.0s), 016/100 VUs, 83 complete and 0 interrupted iterations
+was-one-down   [   3% ] 016/100 VUs  01.0s/30s  100.00 iters/s
+
+running (0m02.0s), 009/100 VUs, 190 complete and 0 interrupted iterations
+was-one-down   [   7% ] 009/100 VUs  02.0s/30s  100.00 iters/s
+
+running (0m03.0s), 007/100 VUs, 292 complete and 0 interrupted iterations
+was-one-down   [  10% ] 007/100 VUs  03.0s/30s  100.00 iters/s
+
+running (0m04.0s), 009/100 VUs, 390 complete and 0 interrupted iterations
+was-one-down   [  13% ] 009/100 VUs  04.0s/30s  100.00 iters/s
+
+running (0m05.0s), 009/100 VUs, 490 complete and 0 interrupted iterations
+was-one-down   [  17% ] 009/100 VUs  05.0s/30s  100.00 iters/s
+
+running (0m06.0s), 009/100 VUs, 590 complete and 0 interrupted iterations
+was-one-down   [  20% ] 009/100 VUs  06.0s/30s  100.00 iters/s
+
+running (0m07.0s), 008/100 VUs, 691 complete and 0 interrupted iterations
+was-one-down   [  23% ] 008/100 VUs  07.0s/30s  100.00 iters/s
+
+running (0m08.0s), 007/100 VUs, 792 complete and 0 interrupted iterations
+was-one-down   [  27% ] 007/100 VUs  08.0s/30s  100.00 iters/s
+
+running (0m09.0s), 009/100 VUs, 890 complete and 0 interrupted iterations
+was-one-down   [  30% ] 009/100 VUs  09.0s/30s  100.00 iters/s
+
+running (0m10.0s), 009/100 VUs, 990 complete and 0 interrupted iterations
+was-one-down   [  33% ] 009/100 VUs  10.0s/30s  100.00 iters/s
+
+running (0m11.0s), 010/100 VUs, 1089 complete and 0 interrupted iterations
+was-one-down   [  37% ] 010/100 VUs  11.0s/30s  100.00 iters/s
+
+running (0m12.0s), 009/100 VUs, 1190 complete and 0 interrupted iterations
+was-one-down   [  40% ] 009/100 VUs  12.0s/30s  100.00 iters/s
+
+running (0m13.0s), 009/100 VUs, 1290 complete and 0 interrupted iterations
+was-one-down   [  43% ] 009/100 VUs  13.0s/30s  100.00 iters/s
+
+running (0m14.0s), 007/100 VUs, 1392 complete and 0 interrupted iterations
+was-one-down   [  47% ] 007/100 VUs  14.0s/30s  100.00 iters/s
+
+running (0m15.0s), 007/100 VUs, 1492 complete and 0 interrupted iterations
+was-one-down   [  50% ] 007/100 VUs  15.0s/30s  100.00 iters/s
+
+running (0m16.0s), 007/100 VUs, 1592 complete and 0 interrupted iterations
+was-one-down   [  53% ] 007/100 VUs  16.0s/30s  100.00 iters/s
+
+running (0m17.0s), 009/100 VUs, 1690 complete and 0 interrupted iterations
+was-one-down   [  57% ] 009/100 VUs  17.0s/30s  100.00 iters/s
+
+running (0m18.0s), 010/100 VUs, 1790 complete and 0 interrupted iterations
+was-one-down   [  60% ] 010/100 VUs  18.0s/30s  100.00 iters/s
+
+running (0m19.0s), 007/100 VUs, 1892 complete and 0 interrupted iterations
+was-one-down   [  63% ] 007/100 VUs  19.0s/30s  100.00 iters/s
+
+running (0m20.0s), 007/100 VUs, 1992 complete and 0 interrupted iterations
+was-one-down   [  67% ] 007/100 VUs  20.0s/30s  100.00 iters/s
+
+running (0m21.0s), 009/100 VUs, 2090 complete and 0 interrupted iterations
+was-one-down   [  70% ] 009/100 VUs  21.0s/30s  100.00 iters/s
+
+running (0m22.0s), 007/100 VUs, 2192 complete and 0 interrupted iterations
+was-one-down   [  73% ] 007/100 VUs  22.0s/30s  100.00 iters/s
+
+running (0m23.0s), 007/100 VUs, 2292 complete and 0 interrupted iterations
+was-one-down   [  77% ] 007/100 VUs  23.0s/30s  100.00 iters/s
+
+running (0m24.0s), 007/100 VUs, 2392 complete and 0 interrupted iterations
+was-one-down   [  80% ] 007/100 VUs  24.0s/30s  100.00 iters/s
+
+running (0m25.0s), 007/100 VUs, 2492 complete and 0 interrupted iterations
+was-one-down   [  83% ] 007/100 VUs  25.0s/30s  100.00 iters/s
+
+running (0m26.0s), 007/100 VUs, 2592 complete and 0 interrupted iterations
+was-one-down   [  87% ] 007/100 VUs  26.0s/30s  100.00 iters/s
+
+running (0m27.0s), 007/100 VUs, 2692 complete and 0 interrupted iterations
+was-one-down   [  90% ] 007/100 VUs  27.0s/30s  100.00 iters/s
+
+running (0m28.0s), 007/100 VUs, 2792 complete and 0 interrupted iterations
+was-one-down   [  93% ] 007/100 VUs  28.0s/30s  100.00 iters/s
+
+running (0m29.0s), 008/100 VUs, 2891 complete and 0 interrupted iterations
+was-one-down   [  97% ] 008/100 VUs  29.0s/30s  100.00 iters/s
+
+running (0m30.0s), 007/100 VUs, 2992 complete and 0 interrupted iterations
+was-one-down   [ 100% ] 007/100 VUs  30.0s/30s  100.00 iters/s
+
+Peak booking k6 summary
+scenario=was-one-down
+scenario_kind=was-one-down
+rate=100/s duration=30s
+confirmed_responses=2
+controlled_rejected=42
+payment_unknown=0
+waiting=20
+technical_failures=0
+
+running (0m30.1s), 000/100 VUs, 3001 complete and 0 interrupted iterations
+was-one-down ✓ [ 100% ] 000/100 VUs  30s  100.00 iters/s

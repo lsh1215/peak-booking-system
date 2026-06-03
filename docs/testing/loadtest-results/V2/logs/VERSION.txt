@@ -1,0 +1,2 @@
+V2 = Redis HA + failover pause current deployment result set.
+Generated from current main deployment on the k3s cloud cluster.

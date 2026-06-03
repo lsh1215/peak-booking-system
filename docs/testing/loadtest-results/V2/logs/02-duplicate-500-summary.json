@@ -1,0 +1,15 @@
+{
+  "http_failed_rate": 0,
+  "dropped_iterations": 0,
+  "iterations": 22501,
+  "booking_p95_ms": 71.3702,
+  "booking_p99_ms": null,
+  "checkout_p95_ms": 67.717,
+  "checkout_p99_ms": null,
+  "technical_failure_rate": 0,
+  "controlled_response_rate": 1,
+  "confirmed_responses": 3,
+  "waiting_responses": 303,
+  "payment_unknown_responses": 0,
+  "controlled_rejected": 14469
+}

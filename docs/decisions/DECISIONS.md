@@ -156,10 +156,10 @@ Recovery policy:
 | 증거 | 확인 내용 | 현재 상태 |
 |---|---|---|
 | unit/integration test | Redis failover pause, half-open probe, local queue bounded/dedupe/drain-grace, worker batch 제한, transient DB failure retry, DB fallback 무제한 우회 금지를 코드 수준에서 검증 | repository에 포함 |
-| k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 원시 결과는 `loadtest-results/`에 보존하되 Git 추적 제외 |
-| Redis master failover k6 | Sentinel failover 중 local queue accepted/full 비율, drain 시간, DB pressure, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
+| k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 정리된 증거는 `docs/testing/loadtest-results/`에 보존하고 Git 추적 |
+| Redis master failover k6 | Sentinel failover 중 hard correctness, controlled response, technical failure 여부를 측정 | 최신 V2 rerun 증거를 `docs/testing/loadtest-results/V2/logs/latest-backend-rerun/`에 보존 |
 
-따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 성공시킨다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 request thread의 직접 DB fallback을 막으며, 작은 bounded local queue와 장애 episode 수용 예산 안에서만 제한적으로 판매를 이어가고, Redis half-open probe 성공 후에도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청을 로컬 큐에 유지한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
+따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 성공시킨다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 request thread의 직접 DB fallback을 막으며, 작은 bounded local queue와 장애 episode 수용 예산 안에서만 제한적으로 판매를 이어가고, Redis half-open probe 성공 후에도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청을 로컬 큐에 유지한다"는** 것이다. Redis master failover의 최신 실행 결과는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)와 `docs/testing/loadtest-results/V2/logs/latest-backend-rerun/`에 연결되어 있다.
 
 ---
 
@@ -456,7 +456,7 @@ Traefik은 k3s 환경에서 2개 이상 WAS replica 앞단의 LB/API gateway 역
 4. k6 smoke/load/resilience: 정상, Redis failover, WAS 1대 down, PG timeout, duplicate, mixed.
 5. LGTM/Grafana: DB pressure, Redis pressure, app latency, Hikari, JVM, gateway shedding 확인.
 
-부하 테스트 원시 결과는 크고 환경 의존적이므로 `loadtest-results/` 아래에 로컬 보존하고 Git에는 올리지 않는다. 대신 제출 문서에는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 두어 **어떤 주장을 어떤 테스트/파일/상태가 뒷받침하는지를** 추적한다.
+부하 테스트 원시 결과는 크고 환경 의존적이므로 날짜별 전체 실행 묶음을 그대로 올리지 않는다. 대신 제출/리뷰에 필요한 요약 문서와 최소 증거만 `docs/testing/loadtest-results/` 아래에 정리해 Git으로 추적한다. 제출 문서에는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 두어 **어떤 주장을 어떤 테스트/파일/상태가 뒷받침하는지를** 추적한다.
 
 Hard correctness fail은 아래와 같다.
 

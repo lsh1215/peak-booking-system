@@ -1,0 +1,82 @@
+NAME                               READY   STATUS    RESTARTS       AGE     IP           NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-55648db7fd-4ppgj   1/1     Running   0              42m     10.42.1.30   peak-booking-k3s-20260601122904-was-1   <none>           <none>
+booking-service-55648db7fd-knp74   1/1     Running   0              8m26s   10.42.2.26   peak-booking-k3s-20260601122904-was-2   <none>           <none>
+lgtm-5d8445656b-lwrqm              1/1     Running   1 (3m9s ago)   75m     10.42.6.12   peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (127m ago)   4h19m   10.42.3.13   peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-86cc94f748-zdqdr             2/2     Running   0              2m57s   10.42.5.23   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---TOP-PODS---
+NAME                               CPU(cores)   MEMORY(bytes)   
+booking-service-55648db7fd-4ppgj   14m          567Mi           
+booking-service-55648db7fd-knp74   95m          519Mi           
+lgtm-5d8445656b-lwrqm              102m         845Mi           
+mysql-0                            26m          669Mi           
+redis-86cc94f748-zdqdr             12m          12Mi            
+---TOP-NODES---
+NAME                                    CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+peak-booking-k3s-20260601122904         86m          4%       1532Mi          19%         
+peak-booking-k3s-20260601122904-lgtm    116m         5%       1638Mi          20%         
+peak-booking-k3s-20260601122904-mysql   46m          2%       1264Mi          15%         
+peak-booking-k3s-20260601122904-redis   34m          1%       627Mi           7%          
+peak-booking-k3s-20260601122904-was-1   45m          2%       1242Mi          15%         
+peak-booking-k3s-20260601122904-was-2   132m         6%       1196Mi          15%         
+---EVENTS---
+LAST SEEN   TYPE      REASON              OBJECT                                  MESSAGE
+8m26s       Normal    Scheduled           pod/booking-service-55648db7fd-knp74    Successfully assigned peak-booking/booking-service-55648db7fd-knp74 to peak-booking-k3s-20260601122904-was-2
+42m         Normal    Scheduled           pod/booking-service-55648db7fd-4ppgj    Successfully assigned peak-booking/booking-service-55648db7fd-4ppgj to peak-booking-k3s-20260601122904-was-1
+41m         Warning   FailedScheduling    pod/booking-service-55648db7fd-s6s8z    0/6 nodes are available: 2 node(s) didn't match pod anti-affinity rules, 4 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/6 nodes are available: 2 No preemption victims found for incoming pod, 4 Preemption is not helpful for scheduling.
+42m         Warning   FailedScheduling    pod/booking-service-55648db7fd-4ppgj    0/6 nodes are available: 2 node(s) didn't match pod anti-affinity rules, 4 node(s) didn't match Pod's node affinity/selector. no new claims to deallocate, preemption: 0/6 nodes are available: 2 No preemption victims found for incoming pod, 4 Preemption is not helpful for scheduling.
+41m         Normal    Scheduled           pod/booking-service-55648db7fd-s6s8z    Successfully assigned peak-booking/booking-service-55648db7fd-s6s8z to peak-booking-k3s-20260601122904-was-2
+2m57s       Normal    Scheduled           pod/redis-86cc94f748-zdqdr              Successfully assigned peak-booking/redis-86cc94f748-zdqdr to peak-booking-k3s-20260601122904-redis
+42m         Normal    Killing             pod/booking-service-5c4b9c757c-mg46l    Stopping container booking-service
+42m         Normal    SuccessfulDelete    replicaset/booking-service-5c4b9c757c   Deleted pod: booking-service-5c4b9c757c-mg46l
+42m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-5c4b9c757c from 2 to 1
+42m         Normal    SuccessfulCreate    replicaset/booking-service-55648db7fd   Created pod: booking-service-55648db7fd-4ppgj
+42m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-55648db7fd from 0 to 1
+42m         Normal    Pulled              pod/booking-service-55648db7fd-4ppgj    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+42m         Normal    Started             pod/booking-service-55648db7fd-4ppgj    Container started
+42m         Normal    Created             pod/booking-service-55648db7fd-4ppgj    Container created
+42m         Normal    Pulled              pod/booking-service-55648db7fd-4ppgj    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+42m         Normal    Started             pod/booking-service-55648db7fd-4ppgj    Container started
+42m         Normal    Created             pod/booking-service-55648db7fd-4ppgj    Container created
+41m         Warning   Unhealthy           pod/booking-service-55648db7fd-4ppgj    Startup probe failed: Get "http://10.42.1.30:8080/actuator/health/liveness": dial tcp 10.42.1.30:8080: connect: connection refused
+41m         Warning   Unhealthy           pod/booking-service-55648db7fd-4ppgj    Readiness probe failed: HTTP probe failed with statuscode: 503
+41m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-5c4b9c757c from 1 to 0
+41m         Normal    Killing             pod/booking-service-5c4b9c757c-ncz4t    Stopping container booking-service
+41m         Normal    SuccessfulCreate    replicaset/booking-service-55648db7fd   Created pod: booking-service-55648db7fd-s6s8z
+41m         Normal    SuccessfulDelete    replicaset/booking-service-5c4b9c757c   Deleted pod: booking-service-5c4b9c757c-ncz4t
+41m         Normal    Created             pod/booking-service-55648db7fd-s6s8z    Container created
+41m         Normal    Pulled              pod/booking-service-55648db7fd-s6s8z    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+41m         Normal    Created             pod/booking-service-55648db7fd-s6s8z    Container created
+41m         Normal    Started             pod/booking-service-55648db7fd-s6s8z    Container started
+41m         Normal    Started             pod/booking-service-55648db7fd-s6s8z    Container started
+41m         Normal    Pulled              pod/booking-service-55648db7fd-s6s8z    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+40m         Warning   Unhealthy           pod/booking-service-55648db7fd-s6s8z    Startup probe failed: Get "http://10.42.2.25:8080/actuator/health/liveness": dial tcp 10.42.2.25:8080: connect: connection refused
+40m         Warning   Unhealthy           pod/booking-service-55648db7fd-s6s8z    Readiness probe failed: HTTP probe failed with statuscode: 503
+11m         Normal    Killing             pod/booking-service-55648db7fd-s6s8z    Stopping container booking-service
+11m         Normal    SuccessfulDelete    replicaset/booking-service-55648db7fd   Deleted pod: booking-service-55648db7fd-s6s8z
+11m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-55648db7fd from 2 to 1
+8m27s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-55648db7fd from 1 to 2
+8m27s       Normal    SuccessfulCreate    replicaset/booking-service-55648db7fd   Created pod: booking-service-55648db7fd-knp74
+8m26s       Normal    Started             pod/booking-service-55648db7fd-knp74    Container started
+8m26s       Normal    Created             pod/booking-service-55648db7fd-knp74    Container created
+8m26s       Normal    Pulled              pod/booking-service-55648db7fd-knp74    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+8m25s       Normal    Started             pod/booking-service-55648db7fd-knp74    Container started
+8m25s       Normal    Created             pod/booking-service-55648db7fd-knp74    Container created
+8m25s       Normal    Pulled              pod/booking-service-55648db7fd-knp74    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+7m41s       Warning   Unhealthy           pod/booking-service-55648db7fd-knp74    Startup probe failed: Get "http://10.42.2.26:8080/actuator/health/liveness": dial tcp 10.42.2.26:8080: connect: connection refused
+7m35s       Warning   Unhealthy           pod/booking-service-55648db7fd-knp74    Readiness probe failed: HTTP probe failed with statuscode: 503
+5m17s       Normal    Killing             pod/redis-86cc94f748-8h299              Stopping container redis-exporter
+5m17s       Normal    SuccessfulDelete    replicaset/redis-86cc94f748             Deleted pod: redis-86cc94f748-8h299
+5m17s       Normal    Killing             pod/redis-86cc94f748-8h299              Stopping container redis
+5m17s       Normal    ScalingReplicaSet   deployment/redis                        Scaled down replica set redis-86cc94f748 from 1 to 0
+3m9s        Normal    Created             pod/lgtm-5d8445656b-lwrqm               Container created
+3m9s        Normal    Pulled              pod/lgtm-5d8445656b-lwrqm               Container image "grafana/otel-lgtm:latest" already present on machine and can be accessed by the pod
+3m9s        Normal    Started             pod/lgtm-5d8445656b-lwrqm               Container started
+2m58s       Normal    ScalingReplicaSet   deployment/redis                        Scaled up replica set redis-86cc94f748 from 0 to 1
+2m58s       Normal    SuccessfulCreate    replicaset/redis-86cc94f748             Created pod: redis-86cc94f748-zdqdr
+2m57s       Normal    Started             pod/redis-86cc94f748-zdqdr              Container started
+2m57s       Normal    Started             pod/redis-86cc94f748-zdqdr              Container started
+2m57s       Normal    Created             pod/redis-86cc94f748-zdqdr              Container created
+2m57s       Normal    Pulled              pod/redis-86cc94f748-zdqdr              Container image "oliver006/redis_exporter:v1.67.0" already present on machine and can be accessed by the pod
+2m57s       Normal    Created             pod/redis-86cc94f748-zdqdr              Container created
+2m57s       Normal    Pulled              pod/redis-86cc94f748-zdqdr              Container image "redis:7.4-alpine" already present on machine and can be accessed by the pod

@@ -1,0 +1,82 @@
+NAME                               READY   STATUS    RESTARTS       AGE    IP           NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-55648db7fd-4ppgj   1/1     Running   0              29m    10.42.1.30   peak-booking-k3s-20260601122904-was-1   <none>           <none>
+booking-service-55648db7fd-s6s8z   1/1     Running   0              28m    10.42.2.25   peak-booking-k3s-20260601122904-was-2   <none>           <none>
+lgtm-5d8445656b-lwrqm              1/1     Running   0              63m    10.42.6.12   peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (114m ago)   4h7m   10.42.3.13   peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-86cc94f748-8h299             2/2     Running   0              50m    10.42.5.22   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---TOP-PODS---
+NAME                               CPU(cores)   MEMORY(bytes)   
+booking-service-55648db7fd-4ppgj   331m         559Mi           
+booking-service-55648db7fd-s6s8z   436m         564Mi           
+lgtm-5d8445656b-lwrqm              1149m        2346Mi          
+mysql-0                            427m         666Mi           
+redis-86cc94f748-8h299             20m          11Mi            
+---TOP-NODES---
+NAME                                    CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+peak-booking-k3s-20260601122904         342m         17%      1640Mi          20%         
+peak-booking-k3s-20260601122904-lgtm    1032m        51%      3161Mi          39%         
+peak-booking-k3s-20260601122904-mysql   264m         13%      1260Mi          15%         
+peak-booking-k3s-20260601122904-redis   47m          2%       627Mi           7%          
+peak-booking-k3s-20260601122904-was-1   452m         22%      1234Mi          15%         
+peak-booking-k3s-20260601122904-was-2   287m         14%      1239Mi          15%         
+---EVENTS---
+51m         Normal    SuccessfulDelete    replicaset/redis-86cc94f748             Deleted pod: redis-86cc94f748-t6dmk
+50m         Normal    SuccessfulCreate    replicaset/redis-86cc94f748             Created pod: redis-86cc94f748-8h299
+50m         Normal    ScalingReplicaSet   deployment/redis                        Scaled up replica set redis-86cc94f748 from 0 to 1
+50m         Normal    Pulled              pod/redis-86cc94f748-8h299              Container image "oliver006/redis_exporter:v1.67.0" already present on machine and can be accessed by the pod
+50m         Normal    Pulled              pod/redis-86cc94f748-8h299              Container image "redis:7.4-alpine" already present on machine and can be accessed by the pod
+50m         Normal    Started             pod/redis-86cc94f748-8h299              Container started
+50m         Normal    Started             pod/redis-86cc94f748-8h299              Container started
+50m         Normal    Created             pod/redis-86cc94f748-8h299              Container created
+50m         Normal    Created             pod/redis-86cc94f748-8h299              Container created
+50m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-7f49f88ff8 from 2 to 1
+50m         Normal    SuccessfulDelete    replicaset/booking-service-7f49f88ff8   Deleted pod: booking-service-7f49f88ff8-5x5kw
+50m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-5c4b9c757c from 0 to 1
+50m         Normal    Killing             pod/booking-service-7f49f88ff8-5x5kw    Stopping container booking-service
+50m         Normal    SuccessfulCreate    replicaset/booking-service-5c4b9c757c   Created pod: booking-service-5c4b9c757c-mg46l
+50m         Normal    Pulled              pod/booking-service-5c4b9c757c-mg46l    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+50m         Normal    Created             pod/booking-service-5c4b9c757c-mg46l    Container created
+50m         Normal    Started             pod/booking-service-5c4b9c757c-mg46l    Container started
+50m         Normal    Pulled              pod/booking-service-5c4b9c757c-mg46l    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+50m         Normal    Started             pod/booking-service-5c4b9c757c-mg46l    Container started
+50m         Normal    Created             pod/booking-service-5c4b9c757c-mg46l    Container created
+49m         Warning   Unhealthy           pod/booking-service-5c4b9c757c-mg46l    Startup probe failed: Get "http://10.42.1.29:8080/actuator/health/liveness": dial tcp 10.42.1.29:8080: connect: connection refused
+49m         Normal    SuccessfulDelete    replicaset/booking-service-7f49f88ff8   Deleted pod: booking-service-7f49f88ff8-tt7km
+49m         Warning   Unhealthy           pod/booking-service-7f49f88ff8-tt7km    Readiness probe failed: Get "http://10.42.2.23:8080/actuator/health/readiness": dial tcp 10.42.2.23:8080: connect: connection refused
+49m         Normal    Killing             pod/booking-service-7f49f88ff8-tt7km    Stopping container booking-service
+49m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-7f49f88ff8 from 1 to 0
+49m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-5c4b9c757c from 1 to 2
+49m         Normal    SuccessfulCreate    replicaset/booking-service-5c4b9c757c   Created pod: booking-service-5c4b9c757c-ncz4t
+49m         Normal    Started             pod/booking-service-5c4b9c757c-ncz4t    Container started
+49m         Normal    Created             pod/booking-service-5c4b9c757c-ncz4t    Container created
+49m         Normal    Pulled              pod/booking-service-5c4b9c757c-ncz4t    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+49m         Normal    Created             pod/booking-service-5c4b9c757c-ncz4t    Container created
+49m         Normal    Pulled              pod/booking-service-5c4b9c757c-ncz4t    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+49m         Normal    Started             pod/booking-service-5c4b9c757c-ncz4t    Container started
+48m         Warning   Unhealthy           pod/booking-service-5c4b9c757c-ncz4t    Startup probe failed: Get "http://10.42.2.24:8080/actuator/health/liveness": dial tcp 10.42.2.24:8080: connect: connection refused
+29m         Normal    Killing             pod/booking-service-5c4b9c757c-mg46l    Stopping container booking-service
+29m         Normal    SuccessfulDelete    replicaset/booking-service-5c4b9c757c   Deleted pod: booking-service-5c4b9c757c-mg46l
+29m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-5c4b9c757c from 2 to 1
+29m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-55648db7fd from 0 to 1
+29m         Normal    SuccessfulCreate    replicaset/booking-service-55648db7fd   Created pod: booking-service-55648db7fd-4ppgj
+29m         Normal    Pulled              pod/booking-service-55648db7fd-4ppgj    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+29m         Normal    Created             pod/booking-service-55648db7fd-4ppgj    Container created
+29m         Normal    Started             pod/booking-service-55648db7fd-4ppgj    Container started
+29m         Normal    Pulled              pod/booking-service-55648db7fd-4ppgj    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+29m         Normal    Created             pod/booking-service-55648db7fd-4ppgj    Container created
+29m         Normal    Started             pod/booking-service-55648db7fd-4ppgj    Container started
+28m         Warning   Unhealthy           pod/booking-service-55648db7fd-4ppgj    Startup probe failed: Get "http://10.42.1.30:8080/actuator/health/liveness": dial tcp 10.42.1.30:8080: connect: connection refused
+28m         Warning   Unhealthy           pod/booking-service-55648db7fd-4ppgj    Readiness probe failed: HTTP probe failed with statuscode: 503
+28m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-5c4b9c757c from 1 to 0
+28m         Normal    SuccessfulDelete    replicaset/booking-service-5c4b9c757c   Deleted pod: booking-service-5c4b9c757c-ncz4t
+28m         Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-55648db7fd from 1 to 2
+28m         Normal    Killing             pod/booking-service-5c4b9c757c-ncz4t    Stopping container booking-service
+28m         Normal    SuccessfulCreate    replicaset/booking-service-55648db7fd   Created pod: booking-service-55648db7fd-s6s8z
+28m         Normal    Started             pod/booking-service-55648db7fd-s6s8z    Container started
+28m         Normal    Created             pod/booking-service-55648db7fd-s6s8z    Container created
+28m         Normal    Pulled              pod/booking-service-55648db7fd-s6s8z    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+28m         Normal    Pulled              pod/booking-service-55648db7fd-s6s8z    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+28m         Normal    Created             pod/booking-service-55648db7fd-s6s8z    Container created
+28m         Normal    Started             pod/booking-service-55648db7fd-s6s8z    Container started
+27m         Warning   Unhealthy           pod/booking-service-55648db7fd-s6s8z    Startup probe failed: Get "http://10.42.2.25:8080/actuator/health/liveness": dial tcp 10.42.2.25:8080: connect: connection refused
+27m         Warning   Unhealthy           pod/booking-service-55648db7fd-s6s8z    Readiness probe failed: HTTP probe failed with statuscode: 503

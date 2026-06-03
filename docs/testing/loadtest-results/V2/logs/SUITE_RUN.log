@@ -1,0 +1,20 @@
+V2_SUITE_START_UTC=2026-06-03T07:45:42Z
+APP_URL=http://34.64.61.68
+INSTANCE_NAME=peak-booking-k3s-20260601122904
+ZONE=asia-northeast3-a
+===== 01-peak-1000 scenario=peak-1000 rate=1000 duration=1m pg=SUCCESS expected_was=2 inject_failover=false =====
+===== 02-duplicate-500 scenario=duplicate rate=500 duration=45s pg=SUCCESS expected_was=2 inject_failover=false =====
+===== 03-pg-timeout-500 scenario=pg-timeout rate=500 duration=45s pg=TIMEOUT expected_was=2 inject_failover=false =====
+===== 04-was-one-down-500 scenario=was-one-down rate=500 duration=1m pg=SUCCESS expected_was=1 inject_failover=false =====
+===== 05-redis-master-failover-500 scenario=booking rate=500 duration=1m pg=SUCCESS expected_was=2 inject_failover=true =====
+Triggering Sentinel failover
+OK
+===== 06-realistic-mixed-500 scenario=realistic-mixed rate=500 duration=1m pg=SUCCESS expected_was=2 inject_failover=false =====
+V2_SUITE_END_UTC=2026-06-03T08:12:42Z
+scenario	exit_code	http_failed_rate	dropped_iterations	iterations	booking_p95_ms	checkout_p95_ms	technical_failure_rate	db_confirmed	db_occupied
+01-peak-1000	0	0	0	60001	96.14399999999996	88.3	0	10	10
+02-duplicate-500	0	0	0	22501	71.3702	67.717	0	10	10
+03-pg-timeout-500	0	0	0	22500	41.52224999999996	null	0	0	0
+04-was-one-down-500	0	0	0	30001	31.23939999999999	32.36	0	10	10
+05-redis-master-failover-500	99	0	1908	28093	6879.090499999997	4663.891	0	10	10
+06-realistic-mixed-500	0	0	0	30001	67.972	78.16	0	8	8

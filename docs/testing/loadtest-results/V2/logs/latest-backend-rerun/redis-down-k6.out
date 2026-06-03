@@ -1,0 +1,162 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: k6/booking-resilience.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 400 max VUs, 1m15s max duration (incl. graceful stop):
+              * redis-down: 100.00 iterations/s for 45s (maxVUs: 100-400, gracefulStop: 30s)
+
+
+running (0m01.0s), 038/100 VUs, 61 complete and 0 interrupted iterations
+redis-down   [   2% ] 038/100 VUs  01.0s/45s  100.00 iters/s
+
+running (0m02.0s), 041/100 VUs, 158 complete and 0 interrupted iterations
+redis-down   [   4% ] 041/100 VUs  02.0s/45s  100.00 iters/s
+
+running (0m03.0s), 043/100 VUs, 256 complete and 0 interrupted iterations
+redis-down   [   7% ] 043/100 VUs  03.0s/45s  100.00 iters/s
+
+running (0m04.0s), 106/106 VUs, 287 complete and 0 interrupted iterations
+redis-down   [   9% ] 106/106 VUs  04.0s/45s  100.00 iters/s
+
+running (0m05.0s), 099/125 VUs, 375 complete and 0 interrupted iterations
+redis-down   [  11% ] 099/125 VUs  05.0s/45s  100.00 iters/s
+
+running (0m06.0s), 029/125 VUs, 545 complete and 0 interrupted iterations
+redis-down   [  13% ] 029/125 VUs  06.0s/45s  100.00 iters/s
+
+running (0m07.0s), 021/125 VUs, 653 complete and 0 interrupted iterations
+redis-down   [  16% ] 021/125 VUs  07.0s/45s  100.00 iters/s
+
+running (0m08.0s), 019/125 VUs, 755 complete and 0 interrupted iterations
+redis-down   [  18% ] 019/125 VUs  08.0s/45s  100.00 iters/s
+
+running (0m09.0s), 023/125 VUs, 851 complete and 0 interrupted iterations
+redis-down   [  20% ] 023/125 VUs  09.0s/45s  100.00 iters/s
+
+running (0m10.0s), 023/125 VUs, 951 complete and 0 interrupted iterations
+redis-down   [  22% ] 023/125 VUs  10.0s/45s  100.00 iters/s
+
+running (0m11.0s), 013/125 VUs, 1061 complete and 0 interrupted iterations
+redis-down   [  24% ] 013/125 VUs  11.0s/45s  100.00 iters/s
+
+running (0m12.0s), 016/125 VUs, 1158 complete and 0 interrupted iterations
+redis-down   [  27% ] 016/125 VUs  12.0s/45s  100.00 iters/s
+
+running (0m13.0s), 014/125 VUs, 1260 complete and 0 interrupted iterations
+redis-down   [  29% ] 014/125 VUs  13.0s/45s  100.00 iters/s
+
+running (0m14.0s), 013/125 VUs, 1361 complete and 0 interrupted iterations
+redis-down   [  31% ] 013/125 VUs  14.0s/45s  100.00 iters/s
+
+running (0m15.0s), 020/125 VUs, 1454 complete and 0 interrupted iterations
+redis-down   [  33% ] 020/125 VUs  15.0s/45s  100.00 iters/s
+
+running (0m16.0s), 012/125 VUs, 1562 complete and 0 interrupted iterations
+redis-down   [  36% ] 012/125 VUs  16.0s/45s  100.00 iters/s
+
+running (0m17.0s), 013/125 VUs, 1661 complete and 0 interrupted iterations
+redis-down   [  38% ] 013/125 VUs  17.0s/45s  100.00 iters/s
+
+running (0m18.0s), 012/125 VUs, 1762 complete and 0 interrupted iterations
+redis-down   [  40% ] 012/125 VUs  18.0s/45s  100.00 iters/s
+
+running (0m19.0s), 014/125 VUs, 1860 complete and 0 interrupted iterations
+redis-down   [  42% ] 014/125 VUs  19.0s/45s  100.00 iters/s
+
+running (0m20.0s), 015/125 VUs, 1959 complete and 0 interrupted iterations
+redis-down   [  44% ] 015/125 VUs  20.0s/45s  100.00 iters/s
+
+running (0m21.0s), 013/125 VUs, 2061 complete and 0 interrupted iterations
+redis-down   [  47% ] 013/125 VUs  21.0s/45s  100.00 iters/s
+
+running (0m22.0s), 012/125 VUs, 2162 complete and 0 interrupted iterations
+redis-down   [  49% ] 012/125 VUs  22.0s/45s  100.00 iters/s
+
+running (0m23.0s), 012/125 VUs, 2262 complete and 0 interrupted iterations
+redis-down   [  51% ] 012/125 VUs  23.0s/45s  100.00 iters/s
+
+running (0m24.0s), 016/125 VUs, 2358 complete and 0 interrupted iterations
+redis-down   [  53% ] 016/125 VUs  24.0s/45s  100.00 iters/s
+
+running (0m25.0s), 012/125 VUs, 2462 complete and 0 interrupted iterations
+redis-down   [  56% ] 012/125 VUs  25.0s/45s  100.00 iters/s
+
+running (0m26.0s), 014/125 VUs, 2560 complete and 0 interrupted iterations
+redis-down   [  58% ] 014/125 VUs  26.0s/45s  100.00 iters/s
+
+running (0m27.0s), 012/125 VUs, 2662 complete and 0 interrupted iterations
+redis-down   [  60% ] 012/125 VUs  27.0s/45s  100.00 iters/s
+
+running (0m28.0s), 011/125 VUs, 2763 complete and 0 interrupted iterations
+redis-down   [  62% ] 011/125 VUs  28.0s/45s  100.00 iters/s
+
+running (0m29.0s), 013/125 VUs, 2861 complete and 0 interrupted iterations
+redis-down   [  64% ] 013/125 VUs  29.0s/45s  100.00 iters/s
+
+running (0m30.0s), 013/125 VUs, 2961 complete and 0 interrupted iterations
+redis-down   [  67% ] 013/125 VUs  30.0s/45s  100.00 iters/s
+
+running (0m31.0s), 011/125 VUs, 3063 complete and 0 interrupted iterations
+redis-down   [  69% ] 011/125 VUs  31.0s/45s  100.00 iters/s
+
+running (0m32.0s), 011/125 VUs, 3163 complete and 0 interrupted iterations
+redis-down   [  71% ] 011/125 VUs  32.0s/45s  100.00 iters/s
+
+running (0m33.0s), 011/125 VUs, 3263 complete and 0 interrupted iterations
+redis-down   [  73% ] 011/125 VUs  33.0s/45s  100.00 iters/s
+
+running (0m34.0s), 012/125 VUs, 3362 complete and 0 interrupted iterations
+redis-down   [  76% ] 012/125 VUs  34.0s/45s  100.00 iters/s
+
+running (0m35.0s), 012/125 VUs, 3462 complete and 0 interrupted iterations
+redis-down   [  78% ] 012/125 VUs  35.0s/45s  100.00 iters/s
+
+running (0m36.0s), 012/125 VUs, 3562 complete and 0 interrupted iterations
+redis-down   [  80% ] 012/125 VUs  36.0s/45s  100.00 iters/s
+
+running (0m37.0s), 012/125 VUs, 3662 complete and 0 interrupted iterations
+redis-down   [  82% ] 012/125 VUs  37.0s/45s  100.00 iters/s
+
+running (0m38.0s), 011/125 VUs, 3763 complete and 0 interrupted iterations
+redis-down   [  84% ] 011/125 VUs  38.0s/45s  100.00 iters/s
+
+running (0m39.0s), 012/125 VUs, 3862 complete and 0 interrupted iterations
+redis-down   [  87% ] 012/125 VUs  39.0s/45s  100.00 iters/s
+
+running (0m40.0s), 012/125 VUs, 3962 complete and 0 interrupted iterations
+redis-down   [  89% ] 012/125 VUs  40.0s/45s  100.00 iters/s
+
+running (0m41.0s), 012/125 VUs, 4062 complete and 0 interrupted iterations
+redis-down   [  91% ] 012/125 VUs  41.0s/45s  100.00 iters/s
+
+running (0m42.0s), 010/125 VUs, 4164 complete and 0 interrupted iterations
+redis-down   [  93% ] 010/125 VUs  42.0s/45s  100.00 iters/s
+
+running (0m43.0s), 011/125 VUs, 4263 complete and 0 interrupted iterations
+redis-down   [  96% ] 011/125 VUs  43.0s/45s  100.00 iters/s
+
+running (0m44.0s), 011/125 VUs, 4363 complete and 0 interrupted iterations
+redis-down   [  98% ] 011/125 VUs  44.0s/45s  100.00 iters/s
+
+running (0m45.0s), 010/125 VUs, 4464 complete and 0 interrupted iterations
+redis-down   [ 100% ] 010/125 VUs  45.0s/45s  100.00 iters/s
+
+Peak booking k6 summary
+scenario=redis-down
+scenario_kind=redis-down
+rate=100/s duration=45s
+confirmed_responses=10
+controlled_rejected=1895
+payment_unknown=0
+waiting=6
+technical_failures=0
+
+running (0m45.1s), 000/125 VUs, 4476 complete and 0 interrupted iterations
+redis-down ✓ [ 100% ] 000/125 VUs  45s  100.00 iters/s

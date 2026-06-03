@@ -1,0 +1,17 @@
+NAME                               READY   STATUS    RESTARTS      AGE    IP            NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-755b44dcb4-r4w9b   1/1     Running   0             140m   10.42.2.42    peak-booking-k3s-20260601122904-was-2   <none>           <none>
+lgtm-57d7c78ff7-skrbj              1/1     Running   0             10h    10.42.6.15    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (14h ago)   17h    10.42.3.13    peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-966465b4f-m27b5              2/2     Running   0             133m   10.42.5.117   peak-booking-k3s-20260601122904-redis   <none>           <none>
+redis-replica-875f5cdfb-lllx8      1/1     Running   0             133m   10.42.6.87    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-replica-875f5cdfb-xxgl4      1/1     Running   0             133m   10.42.0.210   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-6bv6m    1/1     Running   0             133m   10.42.0.211   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-mnz7h    1/1     Running   0             133m   10.42.6.88    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-sentinel-65bd976ff4-rhqwc    1/1     Running   0             133m   10.42.5.118   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---ROLL_OUT---
+deployment "booking-service" successfully rolled out
+---EVENTS---
+LAST SEEN   TYPE     REASON              OBJECT                                  MESSAGE
+3m12s       Normal   Killing             pod/booking-service-755b44dcb4-v56xp    Stopping container booking-service
+3m12s       Normal   SuccessfulDelete    replicaset/booking-service-755b44dcb4   Deleted pod: booking-service-755b44dcb4-v56xp
+3m12s       Normal   ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-755b44dcb4 from 2 to 1

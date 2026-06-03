@@ -1,0 +1,2 @@
+Deleting redis master pod: redis-replica-875f5cdfb-m2gcq
+pod "redis-replica-875f5cdfb-m2gcq" deleted from peak-booking namespace

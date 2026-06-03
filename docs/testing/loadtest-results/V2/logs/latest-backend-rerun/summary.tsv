@@ -1,0 +1,17 @@
+target	http://34.64.61.68
+cluster	peak-booking-k3s-20260601122904
+image	peak-booking/backend:loadtest-20260603-210017
+branch	codex/local-redis-fallback-queue
+commit	a6692e1
+backend_diff_stat	
+scenario	rate	duration	verdict
+health	20	10s	PASS
+booking	50	20s	PASS
+duplicate	30	20s	PASS
+pg-timeout	30	20s	PASS
+payment-failure	30	20s	PASS
+realistic-mixed	30	20s	PASS
+peak-500	500	20s	PASS
+peak-1000	1000	20s	PASS
+was-one-down	100	30s	PASS
+redis-down	100	45s	PASS

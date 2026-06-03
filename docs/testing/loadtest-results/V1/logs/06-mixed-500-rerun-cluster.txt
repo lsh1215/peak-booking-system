@@ -1,0 +1,82 @@
+NAME                               READY   STATUS    RESTARTS       AGE     IP           NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-67bdc6bb85-6mgz6   1/1     Running   0              5m24s   10.42.2.29   peak-booking-k3s-20260601122904-was-2   <none>           <none>
+booking-service-67bdc6bb85-wsp4q   1/1     Running   0              4m26s   10.42.1.33   peak-booking-k3s-20260601122904-was-1   <none>           <none>
+lgtm-5d8445656b-lwrqm              1/1     Running   1 (16m ago)    89m     10.42.6.12   peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (141m ago)   4h33m   10.42.3.13   peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-86cc94f748-zdqdr             2/2     Running   0              16m     10.42.5.23   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---TOP-PODS---
+NAME                               CPU(cores)   MEMORY(bytes)   
+booking-service-67bdc6bb85-6mgz6   175m         471Mi           
+booking-service-67bdc6bb85-wsp4q   169m         459Mi           
+lgtm-5d8445656b-lwrqm              348m         1647Mi          
+mysql-0                            38m          672Mi           
+redis-86cc94f748-zdqdr             14m          11Mi            
+---TOP-NODES---
+NAME                                    CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+peak-booking-k3s-20260601122904         108m         5%       1615Mi          20%         
+peak-booking-k3s-20260601122904-lgtm    310m         15%      2437Mi          30%         
+peak-booking-k3s-20260601122904-mysql   54m          2%       1266Mi          15%         
+peak-booking-k3s-20260601122904-redis   37m          1%       628Mi           7%          
+peak-booking-k3s-20260601122904-was-1   70m          3%       1134Mi          14%         
+peak-booking-k3s-20260601122904-was-2   142m         7%       1147Mi          14%         
+---EVENTS---
+9m58s       Normal    SuccessfulCreate    replicaset/booking-service-59cf5948b    Created pod: booking-service-59cf5948b-wvjwt
+9m58s       Normal    Killing             pod/booking-service-55648db7fd-4ppgj    Stopping container booking-service
+9m58s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-59cf5948b from 1 to 2
+9m58s       Normal    SuccessfulDelete    replicaset/booking-service-55648db7fd   Deleted pod: booking-service-55648db7fd-4ppgj
+9m58s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-55648db7fd from 1 to 0
+9m57s       Normal    Pulled              pod/booking-service-59cf5948b-wvjwt     Container image "mysql:8.4" already present on machine and can be accessed by the pod
+9m57s       Normal    Created             pod/booking-service-59cf5948b-wvjwt     Container created
+9m57s       Normal    Pulled              pod/booking-service-59cf5948b-wvjwt     Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+9m57s       Normal    Started             pod/booking-service-59cf5948b-wvjwt     Container started
+9m57s       Normal    Started             pod/booking-service-59cf5948b-wvjwt     Container started
+9m57s       Normal    Created             pod/booking-service-59cf5948b-wvjwt     Container created
+9m8s        Warning   Unhealthy           pod/booking-service-59cf5948b-wvjwt     Startup probe failed: Get "http://10.42.1.31:8080/actuator/health/liveness": dial tcp 10.42.1.31:8080: connect: connection refused
+8m58s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-59cf5948b from 2 to 1
+8m58s       Normal    Killing             pod/booking-service-59cf5948b-wvjwt     Stopping container booking-service
+8m58s       Normal    SuccessfulDelete    replicaset/booking-service-59cf5948b    Deleted pod: booking-service-59cf5948b-wvjwt
+8m58s       Normal    SuccessfulCreate    replicaset/booking-service-87cd4c9c9    Created pod: booking-service-87cd4c9c9-qp29t
+8m58s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-87cd4c9c9 from 0 to 1
+8m57s       Normal    Started             pod/booking-service-87cd4c9c9-qp29t     Container started
+8m57s       Normal    Pulled              pod/booking-service-87cd4c9c9-qp29t     Container image "mysql:8.4" already present on machine and can be accessed by the pod
+8m57s       Normal    Created             pod/booking-service-87cd4c9c9-qp29t     Container created
+8m57s       Normal    Started             pod/booking-service-87cd4c9c9-qp29t     Container started
+8m57s       Normal    Pulled              pod/booking-service-87cd4c9c9-qp29t     Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+8m57s       Normal    Created             pod/booking-service-87cd4c9c9-qp29t     Container created
+8m7s        Warning   Unhealthy           pod/booking-service-87cd4c9c9-qp29t     Startup probe failed: Get "http://10.42.1.32:8080/actuator/health/liveness": dial tcp 10.42.1.32:8080: connect: connection refused
+8m1s        Normal    ScalingReplicaSet   deployment/booking-service              Scaled up replica set booking-service-87cd4c9c9 from 1 to 2
+8m1s        Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-59cf5948b from 1 to 0
+8m1s        Normal    Killing             pod/booking-service-59cf5948b-5pd6x     Stopping container booking-service
+8m1s        Normal    SuccessfulDelete    replicaset/booking-service-59cf5948b    Deleted pod: booking-service-59cf5948b-5pd6x
+8m          Normal    Started             pod/booking-service-87cd4c9c9-4sflg     Container started
+8m          Normal    SuccessfulCreate    replicaset/booking-service-87cd4c9c9    Created pod: booking-service-87cd4c9c9-4sflg
+8m          Normal    Pulled              pod/booking-service-87cd4c9c9-4sflg     Container image "mysql:8.4" already present on machine and can be accessed by the pod
+8m          Normal    Created             pod/booking-service-87cd4c9c9-4sflg     Container created
+7m59s       Normal    Pulled              pod/booking-service-87cd4c9c9-4sflg     Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+7m59s       Normal    Created             pod/booking-service-87cd4c9c9-4sflg     Container created
+7m59s       Normal    Started             pod/booking-service-87cd4c9c9-4sflg     Container started
+7m15s       Warning   Unhealthy           pod/booking-service-87cd4c9c9-4sflg     Startup probe failed: Get "http://10.42.2.28:8080/actuator/health/liveness": dial tcp 10.42.2.28:8080: connect: connection refused
+7m8s        Warning   Unhealthy           pod/booking-service-87cd4c9c9-4sflg     Readiness probe failed: HTTP probe failed with statuscode: 503
+5m26s       Normal    Killing             pod/booking-service-87cd4c9c9-4sflg     Stopping container booking-service
+5m26s       Normal    ScalingReplicaSet   deployment/booking-service              Scaled down replica set booking-service-87cd4c9c9 from 2 to 1
+5m26s       Normal    SuccessfulDelete    replicaset/booking-service-87cd4c9c9    Deleted pod: booking-service-87cd4c9c9-4sflg
+5m25s       Normal    SuccessfulCreate    replicaset/booking-service-67bdc6bb85   Created pod: booking-service-67bdc6bb85-6mgz6
+5m24s       Normal    Pulled              pod/booking-service-67bdc6bb85-6mgz6    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+5m24s       Normal    Started             pod/booking-service-67bdc6bb85-6mgz6    Container started
+5m24s       Normal    Created             pod/booking-service-67bdc6bb85-6mgz6    Container created
+5m24s       Normal    Started             pod/booking-service-67bdc6bb85-6mgz6    Container started
+5m24s       Normal    Pulled              pod/booking-service-67bdc6bb85-6mgz6    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+5m24s       Normal    Created             pod/booking-service-67bdc6bb85-6mgz6    Container created
+4m40s       Warning   Unhealthy           pod/booking-service-67bdc6bb85-6mgz6    Startup probe failed: Get "http://10.42.2.29:8080/actuator/health/liveness": dial tcp 10.42.2.29:8080: connect: connection refused
+4m33s       Warning   Unhealthy           pod/booking-service-67bdc6bb85-6mgz6    Readiness probe failed: HTTP probe failed with statuscode: 503
+4m28s       Normal    Killing             pod/booking-service-87cd4c9c9-qp29t     Stopping container booking-service
+4m28s       Normal    SuccessfulDelete    replicaset/booking-service-87cd4c9c9    Deleted pod: booking-service-87cd4c9c9-qp29t
+4m28s       Normal    ScalingReplicaSet   deployment/booking-service              (combined from similar events): Scaled up replica set booking-service-67bdc6bb85 from 1 to 2
+4m27s       Normal    SuccessfulCreate    replicaset/booking-service-67bdc6bb85   Created pod: booking-service-67bdc6bb85-wsp4q
+4m26s       Normal    Pulled              pod/booking-service-67bdc6bb85-wsp4q    Container image "mysql:8.4" already present on machine and can be accessed by the pod
+4m26s       Normal    Created             pod/booking-service-67bdc6bb85-wsp4q    Container created
+4m26s       Normal    Started             pod/booking-service-67bdc6bb85-wsp4q    Container started
+4m26s       Normal    Pulled              pod/booking-service-67bdc6bb85-wsp4q    Container image "peak-booking/backend:loadtest" already present on machine and can be accessed by the pod
+4m26s       Normal    Created             pod/booking-service-67bdc6bb85-wsp4q    Container created
+4m26s       Normal    Started             pod/booking-service-67bdc6bb85-wsp4q    Container started
+3m37s       Warning   Unhealthy           pod/booking-service-67bdc6bb85-wsp4q    Startup probe failed: Get "http://10.42.1.33:8080/actuator/health/liveness": dial tcp 10.42.1.33:8080: connect: connection refused

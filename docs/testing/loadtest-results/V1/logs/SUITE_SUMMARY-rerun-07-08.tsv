@@ -1,0 +1,1 @@
+scenario	exit_code	http_failed_rate	dropped_iterations	iterations	booking_p95_ms	checkout_p95_ms	technical_failure_rate	db_confirmed	db_occupied

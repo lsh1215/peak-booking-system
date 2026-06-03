@@ -1,0 +1,6 @@
+scenario	exit_code	http_failed_rate	dropped_iterations	iterations	booking_p95_ms	checkout_p95_ms	technical_failure_rate	db_confirmed	db_occupied
+02-duplicate-500	0	0	0	22501	72.44049999999999	69.309	0	10	10
+03-pg-timeout-500	0	0	0	22501	59.294	null	0	0	0
+04-was-one-down-500	0	0	0	30000	40.11324999999999	42.626149999999996	0	10	10
+05-redis-down-500	99	0	266	29735	4368.2231999999985	3053.2032	0	10	10
+06-mixed-500	0	0	0	30001	89.99794999999997	68.127	0	10	10

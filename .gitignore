@@ -28,6 +28,10 @@ reports/
 logs/
 .codex-log/
 
+# Curated load-test evidence is documentation, not disposable runtime output.
+!docs/testing/loadtest-results/
+!docs/testing/loadtest-results/**
+
 # Local AI / orchestration runtime state
 .omx/
 .claude/logs/

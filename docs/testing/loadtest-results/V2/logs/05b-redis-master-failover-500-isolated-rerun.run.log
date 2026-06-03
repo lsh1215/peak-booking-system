@@ -1,0 +1,5 @@
+ISOLATED_FAILOVER_START_UTC=2026-06-03T08:13:44Z
+NAME=05b-redis-master-failover-500-isolated-rerun
+Triggering isolated Sentinel failover
+OK
+ISOLATED_FAILOVER_END_UTC=2026-06-03T08:19:19Z exit=0

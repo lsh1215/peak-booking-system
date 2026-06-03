@@ -1,0 +1,14 @@
+NAME                               READY   STATUS    RESTARTS      AGE    IP            NODE                                    NOMINATED NODE   READINESS GATES
+booking-service-755b44dcb4-r4w9b   1/1     Running   0             126m   10.42.2.42    peak-booking-k3s-20260601122904-was-2   <none>           <none>
+booking-service-755b44dcb4-v56xp   1/1     Running   0             125m   10.42.1.49    peak-booking-k3s-20260601122904-was-1   <none>           <none>
+lgtm-57d7c78ff7-skrbj              1/1     Running   0             9h     10.42.6.15    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+mysql-0                            2/2     Running   4 (14h ago)   16h    10.42.3.13    peak-booking-k3s-20260601122904-mysql   <none>           <none>
+redis-966465b4f-m27b5              2/2     Running   0             120m   10.42.5.117   peak-booking-k3s-20260601122904-redis   <none>           <none>
+redis-replica-875f5cdfb-lllx8      1/1     Running   0             120m   10.42.6.87    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-replica-875f5cdfb-xxgl4      1/1     Running   0             120m   10.42.0.210   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-6bv6m    1/1     Running   0             119m   10.42.0.211   peak-booking-k3s-20260601122904         <none>           <none>
+redis-sentinel-65bd976ff4-mnz7h    1/1     Running   0             119m   10.42.6.88    peak-booking-k3s-20260601122904-lgtm    <none>           <none>
+redis-sentinel-65bd976ff4-rhqwc    1/1     Running   0             119m   10.42.5.118   peak-booking-k3s-20260601122904-redis   <none>           <none>
+---ROLL_OUT---
+deployment "booking-service" successfully rolled out
+---EVENTS---

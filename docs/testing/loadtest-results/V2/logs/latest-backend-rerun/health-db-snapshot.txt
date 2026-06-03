@@ -1,0 +1,2 @@
+sale_event_id	product_id	total_count	reserved_count	payment_unknown_count	confirmed_count
+1	1	10	0	0	0

@@ -1,0 +1,87 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: k6/booking-resilience.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1000 max VUs, 50s max duration (incl. graceful stop):
+              * peak-500: 500.00 iterations/s for 20s (maxVUs: 250-1000, gracefulStop: 30s)
+
+
+running (01.0s), 0055/0250 VUs, 433 complete and 0 interrupted iterations
+peak-500   [   5% ] 0055/0250 VUs  01.0s/20s  500.00 iters/s
+
+running (02.0s), 0044/0250 VUs, 944 complete and 0 interrupted iterations
+peak-500   [  10% ] 0044/0250 VUs  02.0s/20s  500.00 iters/s
+
+running (03.0s), 0049/0250 VUs, 1439 complete and 0 interrupted iterations
+peak-500   [  15% ] 0049/0250 VUs  03.0s/20s  500.00 iters/s
+
+running (04.0s), 0046/0250 VUs, 1942 complete and 0 interrupted iterations
+peak-500   [  20% ] 0046/0250 VUs  04.0s/20s  500.00 iters/s
+
+running (05.0s), 0050/0250 VUs, 2438 complete and 0 interrupted iterations
+peak-500   [  25% ] 0050/0250 VUs  05.0s/20s  500.00 iters/s
+
+running (06.0s), 0047/0250 VUs, 2941 complete and 0 interrupted iterations
+peak-500   [  30% ] 0047/0250 VUs  06.0s/20s  500.00 iters/s
+
+running (07.0s), 0048/0250 VUs, 3440 complete and 0 interrupted iterations
+peak-500   [  35% ] 0048/0250 VUs  07.0s/20s  500.00 iters/s
+
+running (08.0s), 0048/0250 VUs, 3940 complete and 0 interrupted iterations
+peak-500   [  40% ] 0048/0250 VUs  08.0s/20s  500.00 iters/s
+
+running (09.0s), 0047/0250 VUs, 4441 complete and 0 interrupted iterations
+peak-500   [  45% ] 0047/0250 VUs  09.0s/20s  500.00 iters/s
+
+running (10.0s), 0050/0250 VUs, 4938 complete and 0 interrupted iterations
+peak-500   [  50% ] 0050/0250 VUs  10.0s/20s  500.00 iters/s
+
+running (11.0s), 0050/0250 VUs, 5438 complete and 0 interrupted iterations
+peak-500   [  55% ] 0050/0250 VUs  11.0s/20s  500.00 iters/s
+
+running (12.0s), 0049/0250 VUs, 5939 complete and 0 interrupted iterations
+peak-500   [  60% ] 0049/0250 VUs  12.0s/20s  500.00 iters/s
+
+running (13.0s), 0050/0250 VUs, 6438 complete and 0 interrupted iterations
+peak-500   [  65% ] 0050/0250 VUs  13.0s/20s  500.00 iters/s
+
+running (14.0s), 0049/0250 VUs, 6939 complete and 0 interrupted iterations
+peak-500   [  70% ] 0049/0250 VUs  14.0s/20s  500.00 iters/s
+
+running (15.0s), 0047/0250 VUs, 7441 complete and 0 interrupted iterations
+peak-500   [  75% ] 0047/0250 VUs  15.0s/20s  500.00 iters/s
+
+running (16.0s), 0049/0250 VUs, 7939 complete and 0 interrupted iterations
+peak-500   [  80% ] 0049/0250 VUs  16.0s/20s  500.00 iters/s
+
+running (17.0s), 0046/0250 VUs, 8442 complete and 0 interrupted iterations
+peak-500   [  85% ] 0046/0250 VUs  17.0s/20s  500.00 iters/s
+
+running (18.0s), 0048/0250 VUs, 8940 complete and 0 interrupted iterations
+peak-500   [  90% ] 0048/0250 VUs  18.0s/20s  500.00 iters/s
+
+running (19.0s), 0048/0250 VUs, 9440 complete and 0 interrupted iterations
+peak-500   [  95% ] 0048/0250 VUs  19.0s/20s  500.00 iters/s
+
+running (20.0s), 0048/0250 VUs, 9940 complete and 0 interrupted iterations
+peak-500   [ 100% ] 0048/0250 VUs  20.0s/20s  500.00 iters/s
+
+Peak booking k6 summary
+scenario=peak-500
+scenario_kind=peak
+rate=500/s duration=20s
+confirmed_responses=0
+controlled_rejected=144
+payment_unknown=0
+waiting=20
+technical_failures=0
+
+running (20.1s), 0000/0250 VUs, 10001 complete and 0 interrupted iterations
+peak-500 ✓ [ 100% ] 0000/0250 VUs  20s  500.00 iters/s

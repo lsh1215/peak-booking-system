@@ -767,7 +767,6 @@ flowchart LR
 - DB migration 도구 선택과 migration 순서.
 - local 환경과 향후 production-like 환경의 secret/config 관리 방식.
 - Redis 후보 판단과 checkout/product metadata cache를 같은 Redis instance/logical DB에서 사용할지 분리할지 여부.
-- Redis master failover k6 결과를 최신 코드 기준으로 다시 남기고 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 연결.
 - production profile에서 Mock PG scenario injection을 public request body에서 제거하거나 내부 테스트 경계로 제한.
 
 ---
@@ -787,7 +786,7 @@ flowchart LR
 
 부하 테스트는 unit/integration TDD를 대체하지 않는다. unit/integration test는 구현 전에 작성하고, k6는 구현 후 local 또는 staging-like 환경에서 실행한다. 정상 부하만 통과하는 것은 충분하지 않으며, Redis HA failover 중 pause/recovery, WAS 1대 장애 시 LB/생존 replica 처리, PG timeout/unknown 시 `PAYMENT_UNKNOWN`/recovery 전이, 중복 클릭 폭주 시 멱등성 replay가 부하 상태에서 함께 검증되어야 한다. 장시간 soak/endurance test와 destructive stress test는 첫 구현의 필수 pass/fail 기준이 아니다.
 
-원시 부하 테스트 결과는 `loadtest-results/`에 로컬 보존하고 Git에는 올리지 않는다. 제출 문서는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 통해 어떤 주장이 어떤 테스트/원시 결과와 연결되는지 보여준다.
+정리된 부하 테스트 증거는 `docs/testing/loadtest-results/`에 보존하고 Git으로 추적한다. 단, 새로 생성되는 날짜별 중간 실행 전체 묶음은 그대로 올리지 않고 제출/리뷰에 필요한 최소 증거만 선별한다. 제출 문서는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)를 통해 어떤 주장이 어떤 테스트/원시 결과와 연결되는지 보여준다.
 
 ---
 

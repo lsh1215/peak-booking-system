@@ -1,0 +1,8 @@
+{
+  "http_failed_rate": 0,
+  "dropped_iterations": 0,
+  "booking_p95_ms": 85.86524999999999,
+  "checkout_p95_ms": 72.58,
+  "technical_failure_rate": 0,
+  "controlled_response_rate": 1
+}

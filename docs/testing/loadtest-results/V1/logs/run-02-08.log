@@ -1,0 +1,666 @@
+RUN_DIR=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures
+APP_URL=http://34.64.61.68
+SHOT_SCRAPER=/Users/leesanghun/.local/bin/shot-scraper
+SUITE_START_UTC=2026-06-02T18:57:52Z
+===== 02-duplicate-500 scenario=duplicate rate=500 duration=45s pg=SUCCESS topology=all-up legacy_db_load=false =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/booking-service-55648db7fd-s6s8z condition met
+pod/redis-86cc94f748-8h299 condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+SNAPSHOT 02-duplicate-500-before
+TEST_START 02-duplicate-500 2026-06-02T19:00:09Z 1780426779164
+CAPTURE 02-duplicate-500-before from=1780426779164 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-before-bottleneck.png'
+CAPTURE 02-duplicate-500-mid from=1780426779164 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426779164&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-mid-bottleneck.png'
+TEST_END 02-duplicate-500 2026-06-02T19:01:13Z 1780426903490 exit=0
+CAPTURE 02-duplicate-500-after from=1780426779164 to=1780426903490
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780426779164&to=1780426903490&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-after-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780426779164&to=1780426903490&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-after-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780426779164&to=1780426903490&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780426779164&to=1780426903490&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/02-duplicate-500-after-bottleneck.png'
+SNAPSHOT 02-duplicate-500
+===== 03-pg-timeout-500 scenario=pg-timeout rate=500 duration=45s pg=TIMEOUT topology=all-up legacy_db_load=false =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/booking-service-55648db7fd-s6s8z condition met
+pod/redis-86cc94f748-8h299 condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+SNAPSHOT 03-pg-timeout-500-before
+TEST_START 03-pg-timeout-500 2026-06-02T19:04:16Z 1780427026088
+CAPTURE 03-pg-timeout-500-before from=1780427026088 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-before-bottleneck.png'
+CAPTURE 03-pg-timeout-500-mid from=1780427026088 to=now
+TEST_END 03-pg-timeout-500 2026-06-02T19:05:01Z 1780427131531 exit=0
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427026088&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-mid-bottleneck.png'
+CAPTURE 03-pg-timeout-500-after from=1780427026088 to=1780427131531
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427026088&to=1780427131531&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-after-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427026088&to=1780427131531&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427026088&to=1780427131531&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-after-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427026088&to=1780427131531&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/03-pg-timeout-500-after-redis.png'
+SNAPSHOT 03-pg-timeout-500
+===== 04-was-one-down-500 scenario=was-one-down rate=500 duration=1m pg=SUCCESS topology=was-one-down legacy_db_load=false =====
+STABLE_GATE expected_was=1
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+Scaling booking-service from 2 replicas to 1.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/redis-86cc94f748-8h299 condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+SNAPSHOT 04-was-one-down-500-before
+TEST_START 04-was-one-down-500 2026-06-02T19:08:16Z 1780427266202
+CAPTURE 04-was-one-down-500-before from=1780427266202 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-before-bottleneck.png'
+CAPTURE 04-was-one-down-500-mid from=1780427266202 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-mid-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427266202&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-mid-redis.png'
+TEST_END 04-was-one-down-500 2026-06-02T19:09:18Z 1780427388818 exit=0
+CAPTURE 04-was-one-down-500-after from=1780427266202 to=1780427388818
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427266202&to=1780427388818&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-after-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427266202&to=1780427388818&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-after-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427266202&to=1780427388818&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427266202&to=1780427388818&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/04-was-one-down-500-after-mysql.png'
+SNAPSHOT 04-was-one-down-500
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+===== 05-redis-down-500 scenario=redis-down rate=500 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=false =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/booking-service-55648db7fd-knp74 condition met
+pod/redis-86cc94f748-8h299 condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+Scaling Redis to 0 replicas.
+deployment.apps/redis scaled
+SNAPSHOT 05-redis-down-500-before
+TEST_START 05-redis-down-500 2026-06-02T19:13:57Z 1780427607890
+CAPTURE 05-redis-down-500-before from=1780427607890 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-before-bottleneck.png'
+CAPTURE 05-redis-down-500-mid from=1780427607890 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-mid-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427607890&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/05-redis-down-500-mid-redis.png'
+TEST_END 05-redis-down-500 2026-06-02T19:14:58Z 1780427728500 exit=99
+CAPTURE 05-redis-down-500-after from=1780427607890 to=1780427728500
+Traceback (most recent call last):
+  File "/Users/leesanghun/.local/bin/shot-scraper", line 6, in <module>
+    sys.exit(cli())
+             ~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1873, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 381, in shot
+    shot = take_shot(
+        context,
+    ...<6 lines>...
+        silent=silent,
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 1479, in take_shot
+    response = page.goto(url)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/sync_api/_generated.py", line 9054, in goto
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.goto(
+        ^^^^^^^^^^^^^^^^^^^^
+            url=url, timeout=timeout, waitUntil=wait_until, referer=referer
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_page.py", line 552, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_frame.py", line 153, in goto
+    await self._channel.send(
+        "goto", self._navigation_timeout, locals_to_params(locals())
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_CONNECTION_RESET at http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk
+Call log:
+  - navigating to "http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk", waiting until "load"
+
+Traceback (most recent call last):
+  File "/Users/leesanghun/.local/bin/shot-scraper", line 6, in <module>
+    sys.exit(cli())
+             ~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1873, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 381, in shot
+    shot = take_shot(
+        context,
+    ...<6 lines>...
+        silent=silent,
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 1479, in take_shot
+    response = page.goto(url)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/sync_api/_generated.py", line 9054, in goto
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.goto(
+        ^^^^^^^^^^^^^^^^^^^^
+            url=url, timeout=timeout, waitUntil=wait_until, referer=referer
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_page.py", line 552, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_frame.py", line 153, in goto
+    await self._channel.send(
+        "goto", self._navigation_timeout, locals_to_params(locals())
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_CONNECTION_RESET at http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk
+Call log:
+  - navigating to "http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk", waiting until "load"
+
+Traceback (most recent call last):
+  File "/Users/leesanghun/.local/bin/shot-scraper", line 6, in <module>
+    sys.exit(cli())
+             ~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1873, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 381, in shot
+    shot = take_shot(
+        context,
+    ...<6 lines>...
+        silent=silent,
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 1479, in take_shot
+    response = page.goto(url)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/sync_api/_generated.py", line 9054, in goto
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.goto(
+        ^^^^^^^^^^^^^^^^^^^^
+            url=url, timeout=timeout, waitUntil=wait_until, referer=referer
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_page.py", line 552, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_frame.py", line 153, in goto
+    await self._channel.send(
+        "goto", self._navigation_timeout, locals_to_params(locals())
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_CONNECTION_RESET at http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk
+Call log:
+  - navigating to "http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk", waiting until "load"
+
+Traceback (most recent call last):
+  File "/Users/leesanghun/.local/bin/shot-scraper", line 6, in <module>
+    sys.exit(cli())
+             ~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1873, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 381, in shot
+    shot = take_shot(
+        context,
+    ...<6 lines>...
+        silent=silent,
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/shot_scraper/cli.py", line 1479, in take_shot
+    response = page.goto(url)
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/sync_api/_generated.py", line 9054, in goto
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.goto(
+        ^^^^^^^^^^^^^^^^^^^^
+            url=url, timeout=timeout, waitUntil=wait_until, referer=referer
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_page.py", line 552, in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_frame.py", line 153, in goto
+    await self._channel.send(
+        "goto", self._navigation_timeout, locals_to_params(locals())
+    )
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/leesanghun/.local/pipx/venvs/shot-scraper/lib/python3.14/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_CONNECTION_RESET at http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk
+Call log:
+  - navigating to "http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427607890&to=1780427728500&timezone=browser&kiosk", waiting until "load"
+
+SNAPSHOT 05-redis-down-500
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+Waiting for deployment "redis" rollout to finish: 0 of 1 updated replicas are available...
+deployment "redis" successfully rolled out
+===== 06-mixed-500 scenario=mixed rate=500 duration=1m pg=SUCCESS topology=all-up legacy_db_load=false =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-55648db7fd-4ppgj condition met
+pod/booking-service-55648db7fd-knp74 condition met
+pod/redis-86cc94f748-zdqdr condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+SNAPSHOT 06-mixed-500-before
+TEST_START 06-mixed-500 2026-06-02T19:18:07Z 1780427857643
+CAPTURE 06-mixed-500-before from=1780427857643 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-before-bottleneck.png'
+CAPTURE 06-mixed-500-mid from=1780427857643 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427857643&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-mid-bottleneck.png'
+TEST_END 06-mixed-500 2026-06-02T19:19:08Z 1780427978167 exit=0
+CAPTURE 06-mixed-500-after from=1780427857643 to=1780427978167
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780427857643&to=1780427978167&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-after-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780427857643&to=1780427978167&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-after-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780427857643&to=1780427978167&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780427857643&to=1780427978167&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-after-bottleneck.png'
+SNAPSHOT 06-mixed-500
+===== 07-shared-db-redis-down-500 scenario=redis-down rate=500 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=true =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment "booking-service" successfully rolled out
+RUN_DIR=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures
+APP_URL=http://34.64.61.68
+SHOT_SCRAPER=/Users/leesanghun/.local/bin/shot-scraper
+REQUESTED_SCENARIOS=06,07,08
+RUN_LABEL_SUFFIX=-rerun
+SUITE_START_UTC=2026-06-02T19:26:02Z
+===== 06-mixed-500-rerun scenario=mixed rate=500 duration=1m pg=SUCCESS topology=all-up legacy_db_load=false =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment.apps/booking-service restarted
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-67bdc6bb85-6mgz6 condition met
+pod/booking-service-67bdc6bb85-wsp4q condition met
+pod/redis-86cc94f748-zdqdr condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+SNAPSHOT 06-mixed-500-rerun-before
+TEST_START 06-mixed-500-rerun 2026-06-02T19:30:11Z 1780428581877
+CAPTURE 06-mixed-500-rerun-before from=1780428581877 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-before-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-before-mysql.png'
+CAPTURE 06-mixed-500-rerun-mid from=1780428581877 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-mid-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780428581877&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-mid-mysql.png'
+TEST_END 06-mixed-500-rerun 2026-06-02T19:31:28Z 1780428718626 exit=0
+CAPTURE 06-mixed-500-rerun-after from=1780428581877 to=1780428718626
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780428581877&to=1780428718626&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-after-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780428581877&to=1780428718626&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-after-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780428581877&to=1780428718626&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780428581877&to=1780428718626&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/06-mixed-500-rerun-after-mysql.png'
+SNAPSHOT 06-mixed-500-rerun
+===== 07-shared-db-redis-down-500-rerun scenario=redis-down rate=500 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=true =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+RUN_DIR=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures
+APP_URL=http://34.64.61.68
+SHOT_SCRAPER=/Users/leesanghun/.local/bin/shot-scraper
+REQUESTED_SCENARIOS=07,08
+RUN_LABEL_SUFFIX=-rerun
+SUITE_START_UTC=2026-06-02T19:34:33Z
+===== 07-shared-db-redis-down-500-rerun scenario=redis-down rate=500 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=true =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment.apps/booking-service restarted
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-6bb8cf89fc-kptcr condition met
+pod/booking-service-6bb8cf89fc-rgc2f condition met
+pod/redis-86cc94f748-zdqdr condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+Scaling Redis to 0 replicas.
+deployment.apps/redis scaled
+START legacy DB load
+pod/legacy-db-load created
+RUN_DIR=/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures
+APP_URL=http://34.64.61.68
+SHOT_SCRAPER=/Users/leesanghun/.local/bin/shot-scraper
+REQUESTED_SCENARIOS=07,08
+RUN_LABEL_SUFFIX=-rerun2
+SUITE_START_UTC=2026-06-02T19:41:57Z
+===== 07-shared-db-redis-down-500-rerun2 scenario=redis-down rate=500 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=true =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment.apps/booking-service restarted
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-75f674687c-7p5r5 condition met
+pod/booking-service-75f674687c-lxsh2 condition met
+pod/redis-86cc94f748-glf7v condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+Scaling Redis to 0 replicas.
+deployment.apps/redis scaled
+START legacy DB load
+pod/legacy-db-load created
+pod/legacy-db-load condition met
+SNAPSHOT 07-shared-db-redis-down-500-rerun2-before
+TEST_START 07-shared-db-redis-down-500-rerun2 2026-06-02T19:47:09Z 1780429599861
+CAPTURE 07-shared-db-redis-down-500-rerun2-before from=1780429599861 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-before-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-before-mysql.png'
+CAPTURE 07-shared-db-redis-down-500-rerun2-mid from=1780429599861 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-mid-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780429599861&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-mid-bottleneck.png'
+TEST_END 07-shared-db-redis-down-500-rerun2 2026-06-02T19:48:10Z 1780429720375 exit=0
+CAPTURE 07-shared-db-redis-down-500-rerun2-after from=1780429599861 to=1780429720375
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780429599861&to=1780429720375&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-after-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780429599861&to=1780429720375&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-after-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780429599861&to=1780429720375&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-after-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780429599861&to=1780429720375&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/07-shared-db-redis-down-500-rerun2-after-loadtest.png'
+SNAPSHOT 07-shared-db-redis-down-500-rerun2
+STOP legacy DB load
+pod "legacy-db-load" deleted from peak-booking namespace
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+Waiting for deployment "redis" rollout to finish: 0 of 1 updated replicas are available...
+deployment "redis" successfully rolled out
+===== 08-shared-db-redis-down-1000-rerun2 scenario=redis-down rate=1000 duration=1m pg=SUCCESS topology=redis-down legacy_db_load=true =====
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment.apps/booking-service restarted
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-644b89b785-6f4gd condition met
+pod/booking-service-644b89b785-79tm7 condition met
+pod/redis-86cc94f748-2cv8v condition met
+Resetting MySQL dataset.
+Resetting Redis admission state if Redis is up.
+OK
+Dataset reset complete.
+Scaling Redis to 0 replicas.
+deployment.apps/redis scaled
+START legacy DB load
+pod/legacy-db-load created
+pod/legacy-db-load condition met
+SNAPSHOT 08-shared-db-redis-down-1000-rerun2-before
+TEST_START 08-shared-db-redis-down-1000-rerun2 2026-06-02T19:55:02Z 1780430072887
+CAPTURE 08-shared-db-redis-down-1000-rerun2-before from=1780430072887 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-before-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-before-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-before-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-before-bottleneck.png'
+CAPTURE 08-shared-db-redis-down-1000-rerun2-mid from=1780430072887 to=now
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-mid-redis.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-mid-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-mid-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780430072887&to=now&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-mid-loadtest.png'
+TEST_END 08-shared-db-redis-down-1000-rerun2 2026-06-02T19:56:03Z 1780430193593 exit=99
+CAPTURE 08-shared-db-redis-down-1000-rerun2-after from=1780430072887 to=1780430193593
+Screenshot of 'http://localhost:3000/d/peak-booking-mysql/peak-booking-mysql?orgId=1&from=1780430072887&to=1780430193593&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-after-mysql.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-bottleneck/peak-booking-bottleneck-detection?orgId=1&from=1780430072887&to=1780430193593&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-after-bottleneck.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-loadtest/peak-booking-load-test?orgId=1&from=1780430072887&to=1780430193593&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-after-loadtest.png'
+Screenshot of 'http://localhost:3000/d/peak-booking-redis/peak-booking-redis?orgId=1&from=1780430072887&to=1780430193593&timezone=browser&kiosk' written to '/Users/leesanghun/My_Project/peak-booking-system/loadtest-results/20260602T184646Z-isolated-from-01-with-captures/captures/08-shared-db-redis-down-1000-rerun2-after-redis.png'
+SNAPSHOT 08-shared-db-redis-down-1000-rerun2
+STOP legacy DB load
+pod "legacy-db-load" deleted from peak-booking namespace
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+Waiting for deployment "redis" rollout to finish: 0 of 1 updated replicas are available...
+deployment "redis" successfully rolled out
+STABLE_GATE expected_was=2
+No resources found
+Restoring Redis to 1 replica.
+deployment.apps/redis scaled
+deployment "redis" successfully rolled out
+Restoring booking-service to 2 replicas.
+deployment.apps/booking-service scaled
+deployment "booking-service" successfully rolled out
+deployment.apps/booking-service restarted
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+Waiting for deployment "booking-service" rollout to finish: 1 of 2 updated replicas are available...
+deployment "booking-service" successfully rolled out
+deployment "redis" successfully rolled out
+pod/booking-service-74d4d64d98-gv56s condition met
+pod/booking-service-74d4d64d98-rd5sh condition met
+pod/redis-86cc94f748-27ccs condition met
+STOP legacy DB load
+SUITE_END_UTC=2026-06-02T20:01:11Z
+scenario	exit_code	http_failed_rate	dropped_iterations	iterations	booking_p95_ms	checkout_p95_ms	technical_failure_rate	db_confirmed	db_occupied
+07-shared-db-redis-down-500-rerun2	0	0	0	30000	365.96909999999974	95.50444999999999	0	10	10
+08-shared-db-redis-down-1000-rerun2	99	0.03260629208965725	11057	48944	8222.643	2422.2427999999995	0.03260629208965725	10	10

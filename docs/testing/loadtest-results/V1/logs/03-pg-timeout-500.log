@@ -1,0 +1,162 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: k6/booking-resilience.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1500 max VUs, 1m15s max duration (incl. graceful stop):
+              * pg-timeout: 500.00 iterations/s for 45s (maxVUs: 1000-1500, gracefulStop: 30s)
+
+
+running (0m00.9s), 0033/1000 VUs, 395 complete and 0 interrupted iterations
+pg-timeout   [   2% ] 0033/1000 VUs  00.9s/45s  500.00 iters/s
+
+running (0m01.9s), 0022/1000 VUs, 906 complete and 0 interrupted iterations
+pg-timeout   [   4% ] 0022/1000 VUs  01.9s/45s  500.00 iters/s
+
+running (0m02.9s), 0015/1000 VUs, 1413 complete and 0 interrupted iterations
+pg-timeout   [   6% ] 0015/1000 VUs  02.9s/45s  500.00 iters/s
+
+running (0m03.9s), 0012/1000 VUs, 1916 complete and 0 interrupted iterations
+pg-timeout   [   9% ] 0012/1000 VUs  03.9s/45s  500.00 iters/s
+
+running (0m04.9s), 0052/1000 VUs, 2387 complete and 0 interrupted iterations
+pg-timeout   [  11% ] 0052/1000 VUs  04.9s/45s  500.00 iters/s
+
+running (0m05.9s), 0009/1000 VUs, 2919 complete and 0 interrupted iterations
+pg-timeout   [  13% ] 0009/1000 VUs  05.9s/45s  500.00 iters/s
+
+running (0m06.9s), 0011/1000 VUs, 3417 complete and 0 interrupted iterations
+pg-timeout   [  15% ] 0011/1000 VUs  06.9s/45s  500.00 iters/s
+
+running (0m07.9s), 0014/1000 VUs, 3914 complete and 0 interrupted iterations
+pg-timeout   [  17% ] 0014/1000 VUs  07.9s/45s  500.00 iters/s
+
+running (0m08.9s), 0015/1000 VUs, 4413 complete and 0 interrupted iterations
+pg-timeout   [  20% ] 0015/1000 VUs  08.9s/45s  500.00 iters/s
+
+running (0m09.9s), 0012/1000 VUs, 4916 complete and 0 interrupted iterations
+pg-timeout   [  22% ] 0012/1000 VUs  09.9s/45s  500.00 iters/s
+
+running (0m10.9s), 0017/1000 VUs, 5411 complete and 0 interrupted iterations
+pg-timeout   [  24% ] 0017/1000 VUs  10.9s/45s  500.00 iters/s
+
+running (0m11.9s), 0010/1000 VUs, 5918 complete and 0 interrupted iterations
+pg-timeout   [  26% ] 0010/1000 VUs  11.9s/45s  500.00 iters/s
+
+running (0m12.9s), 0009/1000 VUs, 6419 complete and 0 interrupted iterations
+pg-timeout   [  29% ] 0009/1000 VUs  12.9s/45s  500.00 iters/s
+
+running (0m13.9s), 0010/1000 VUs, 6918 complete and 0 interrupted iterations
+pg-timeout   [  31% ] 0010/1000 VUs  13.9s/45s  500.00 iters/s
+
+running (0m14.9s), 0013/1000 VUs, 7415 complete and 0 interrupted iterations
+pg-timeout   [  33% ] 0013/1000 VUs  14.9s/45s  500.00 iters/s
+
+running (0m15.9s), 0012/1000 VUs, 7917 complete and 0 interrupted iterations
+pg-timeout   [  35% ] 0012/1000 VUs  15.9s/45s  500.00 iters/s
+
+running (0m16.9s), 0011/1000 VUs, 8417 complete and 0 interrupted iterations
+pg-timeout   [  37% ] 0011/1000 VUs  16.9s/45s  500.00 iters/s
+
+running (0m17.9s), 0012/1000 VUs, 8916 complete and 0 interrupted iterations
+pg-timeout   [  40% ] 0012/1000 VUs  17.9s/45s  500.00 iters/s
+
+running (0m18.9s), 0009/1000 VUs, 9419 complete and 0 interrupted iterations
+pg-timeout   [  42% ] 0009/1000 VUs  18.9s/45s  500.00 iters/s
+
+running (0m19.9s), 0010/1000 VUs, 9920 complete and 0 interrupted iterations
+pg-timeout   [  44% ] 0010/1000 VUs  19.9s/45s  500.00 iters/s
+
+running (0m20.9s), 0013/1000 VUs, 10416 complete and 0 interrupted iterations
+pg-timeout   [  46% ] 0013/1000 VUs  20.9s/45s  500.00 iters/s
+
+running (0m21.9s), 0010/1000 VUs, 10918 complete and 0 interrupted iterations
+pg-timeout   [  49% ] 0010/1000 VUs  21.9s/45s  500.00 iters/s
+
+running (0m22.9s), 0008/1000 VUs, 11420 complete and 0 interrupted iterations
+pg-timeout   [  51% ] 0008/1000 VUs  22.9s/45s  500.00 iters/s
+
+running (0m23.9s), 0011/1000 VUs, 11919 complete and 0 interrupted iterations
+pg-timeout   [  53% ] 0011/1000 VUs  23.9s/45s  500.00 iters/s
+
+running (0m24.9s), 0012/1000 VUs, 12416 complete and 0 interrupted iterations
+pg-timeout   [  55% ] 0012/1000 VUs  24.9s/45s  500.00 iters/s
+
+running (0m25.9s), 0009/1000 VUs, 12919 complete and 0 interrupted iterations
+pg-timeout   [  57% ] 0009/1000 VUs  25.9s/45s  500.00 iters/s
+
+running (0m26.9s), 0011/1000 VUs, 13417 complete and 0 interrupted iterations
+pg-timeout   [  60% ] 0011/1000 VUs  26.9s/45s  500.00 iters/s
+
+running (0m27.9s), 0011/1000 VUs, 13917 complete and 0 interrupted iterations
+pg-timeout   [  62% ] 0011/1000 VUs  27.9s/45s  500.00 iters/s
+
+running (0m28.9s), 0014/1000 VUs, 14413 complete and 0 interrupted iterations
+pg-timeout   [  64% ] 0014/1000 VUs  28.9s/45s  500.00 iters/s
+
+running (0m29.9s), 0012/1000 VUs, 14916 complete and 0 interrupted iterations
+pg-timeout   [  66% ] 0012/1000 VUs  29.9s/45s  500.00 iters/s
+
+running (0m30.9s), 0013/1000 VUs, 15414 complete and 0 interrupted iterations
+pg-timeout   [  69% ] 0013/1000 VUs  30.9s/45s  500.00 iters/s
+
+running (0m31.9s), 0008/1000 VUs, 15919 complete and 0 interrupted iterations
+pg-timeout   [  71% ] 0008/1000 VUs  31.9s/45s  500.00 iters/s
+
+running (0m32.9s), 0009/1000 VUs, 16419 complete and 0 interrupted iterations
+pg-timeout   [  73% ] 0009/1000 VUs  32.9s/45s  500.00 iters/s
+
+running (0m33.9s), 0010/1000 VUs, 16918 complete and 0 interrupted iterations
+pg-timeout   [  75% ] 0010/1000 VUs  33.9s/45s  500.00 iters/s
+
+running (0m34.9s), 0016/1000 VUs, 17412 complete and 0 interrupted iterations
+pg-timeout   [  77% ] 0016/1000 VUs  34.9s/45s  500.00 iters/s
+
+running (0m35.9s), 0008/1000 VUs, 17920 complete and 0 interrupted iterations
+pg-timeout   [  80% ] 0008/1000 VUs  35.9s/45s  500.00 iters/s
+
+running (0m36.9s), 0014/1000 VUs, 18414 complete and 0 interrupted iterations
+pg-timeout   [  82% ] 0014/1000 VUs  36.9s/45s  500.00 iters/s
+
+running (0m37.9s), 0009/1000 VUs, 18918 complete and 0 interrupted iterations
+pg-timeout   [  84% ] 0009/1000 VUs  37.9s/45s  500.00 iters/s
+
+running (0m38.9s), 0009/1000 VUs, 19419 complete and 0 interrupted iterations
+pg-timeout   [  86% ] 0009/1000 VUs  38.9s/45s  500.00 iters/s
+
+running (0m39.9s), 0012/1000 VUs, 19915 complete and 0 interrupted iterations
+pg-timeout   [  89% ] 0012/1000 VUs  39.9s/45s  500.00 iters/s
+
+running (0m40.9s), 0012/1000 VUs, 20417 complete and 0 interrupted iterations
+pg-timeout   [  91% ] 0012/1000 VUs  40.9s/45s  500.00 iters/s
+
+running (0m41.9s), 0017/1000 VUs, 20911 complete and 0 interrupted iterations
+pg-timeout   [  93% ] 0017/1000 VUs  41.9s/45s  500.00 iters/s
+
+running (0m42.9s), 0009/1000 VUs, 21419 complete and 0 interrupted iterations
+pg-timeout   [  95% ] 0009/1000 VUs  42.9s/45s  500.00 iters/s
+
+running (0m43.9s), 0012/1000 VUs, 21917 complete and 0 interrupted iterations
+pg-timeout   [  97% ] 0012/1000 VUs  43.9s/45s  500.00 iters/s
+
+running (0m44.9s), 0012/1000 VUs, 22417 complete and 0 interrupted iterations
+pg-timeout   [ 100% ] 0012/1000 VUs  44.9s/45s  500.00 iters/s
+
+Peak booking k6 summary
+scenario=pg-timeout
+scenario_kind=pg-timeout
+rate=500/s duration=45s
+confirmed_responses=0
+controlled_rejected=13311
+payment_unknown=3
+waiting=20
+technical_failures=0
+
+running (0m45.0s), 0000/1000 VUs, 22501 complete and 0 interrupted iterations
+pg-timeout ✓ [ 100% ] 0000/1000 VUs  45s  500.00 iters/s
