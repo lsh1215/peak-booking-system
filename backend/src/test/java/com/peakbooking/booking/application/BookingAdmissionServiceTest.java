@@ -368,31 +368,93 @@ class BookingAdmissionServiceTest {
     }
 
     @Test
-    void should_not_pause_redis_gate_when_mysql_admission_persistence_fails() {
+    void should_compensate_new_redis_candidate_and_pause_when_mysql_admission_persistence_fails() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                properties,
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                new BookingDbWriteBulkhead(properties),
                 Duration.ofSeconds(1)
         );
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
         when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenReturn(new RedisAdmissionGateway.Result(true, 1));
+                .thenReturn(new RedisAdmissionGateway.Result(true, 1, true));
         when(transactionService.createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30))
                 .thenThrow(new DataAccessResourceFailureException("mysql unavailable"));
 
-        assertThatThrownBy(() -> service.admit(1, 1, 101, "attempt-101"))
-                .isInstanceOf(DataAccessResourceFailureException.class);
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
 
         verify(redisAdmissionGateway).tryAdmit(1, 1, 101, 30);
+        verify(redisAdmissionGateway).compensateAdmission(1, 1, 101, 1);
+        verify(redisAdmissionGateway).pauseAdmission(1, 1, properties.redisFailoverRetryAfter(),
+                "ADMISSION_PERSISTENCE_UNAVAILABLE");
         verify(transactionService, times(3))
                 .createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30);
         verify(transactionService, never()).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_not_compensate_existing_redis_candidate_when_mysql_admission_persistence_fails() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenReturn(new RedisAdmissionGateway.Result(true, 7, false));
+        when(transactionService.createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 7L, 30))
+                .thenThrow(new DataAccessResourceFailureException("mysql unavailable"));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, never()).compensateAdmission(1, 1, 101, 7);
+        verify(redisAdmissionGateway).pauseAdmission(1, 1, properties.redisFailoverRetryAfter(),
+                "ADMISSION_PERSISTENCE_UNAVAILABLE");
+    }
+
+    @Test
+    void should_reject_cross_replica_admission_pause_without_calling_redis_lua() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.isAdmissionPaused(1, 1)).thenReturn(true);
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway).isAdmissionPaused(1, 1);
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 101, 30);
+        verify(repository).gateMode(1, 1);
+        verifyNoInteractions(transactionService);
     }
 
     @Test

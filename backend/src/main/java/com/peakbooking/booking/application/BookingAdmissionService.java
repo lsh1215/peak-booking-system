@@ -26,6 +26,7 @@ public class BookingAdmissionService {
     private static final Logger log = LoggerFactory.getLogger(BookingAdmissionService.class);
     private static final int REDIS_ADMISSION_PERSISTENCE_ATTEMPTS = 3;
     private static final Duration REDIS_ADMISSION_PERSISTENCE_BACKOFF = Duration.ofMillis(20);
+    private static final String ADMISSION_PERSISTENCE_UNAVAILABLE = "ADMISSION_PERSISTENCE_UNAVAILABLE";
 
     private final BookingProperties properties;
     private final BookingJpaRepository repository;
@@ -81,6 +82,15 @@ public class BookingAdmissionService {
             return redisAdmissionWithDurablePersistence(saleEventId, productId, userId, bookingAttemptId);
         } catch (RedisAdmissionFailureException redisFailure) {
             return pauseForRedisFailover(saleEventId, productId, redisFailure);
+        } catch (AdmissionPersistenceUnavailableException persistenceFailure) {
+            log.warn(
+                    "MySQL admission persistence unavailable after Redis admission; rejecting saleEventId={} productId={} userId={}",
+                    saleEventId,
+                    productId,
+                    userId,
+                    persistenceFailure.cause()
+            );
+            return AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED);
         } finally {
             redisAdmissionPermits.release();
         }
@@ -93,20 +103,109 @@ public class BookingAdmissionService {
             String bookingAttemptId
     ) {
         return dbWriteBulkhead.execute(() -> {
+            if (isCrossReplicaAdmissionPaused(saleEventId, productId)) {
+                return AdmissionDecision.rejected(GateMode.REDIS_FAILOVER_PAUSED);
+            }
             RedisAdmissionGateway.Result result = tryRedisAdmission(saleEventId, productId, userId);
             if (!result.admitted()) {
                 return AdmissionDecision.rejected(GateMode.REDIS);
             }
-            return persistRedisAdmission(
+            try {
+                return persistRedisAdmission(
+                        saleEventId,
+                        productId,
+                        userId,
+                        bookingAttemptId,
+                        GateMode.REDIS,
+                        result.redisSeq(),
+                        properties.candidateLimit()
+                );
+            } catch (CannotCreateTransactionException
+                     | QueryTimeoutException
+                     | DataAccessResourceFailureException persistenceFailure) {
+                openAdmissionPersistencePause(saleEventId, productId, persistenceFailure);
+                compensateRedisAdmissionIfNewlyCreated(saleEventId, productId, userId, result);
+                throw new AdmissionPersistenceUnavailableException(persistenceFailure);
+            }
+        });
+    }
+
+    private boolean isCrossReplicaAdmissionPaused(long saleEventId, long productId) {
+        try {
+            boolean paused = redisAdmissionGateway.isAdmissionPaused(productId, saleEventId);
+            if (paused) {
+                rememberGateMode(saleEventId, productId, GateMode.REDIS_FAILOVER_PAUSED);
+            }
+            return paused;
+        } catch (RedisSystemException | QueryTimeoutException | DataAccessResourceFailureException failure) {
+            throw new RedisAdmissionFailureException(failure);
+        }
+    }
+
+    private void openAdmissionPersistencePause(
+            long saleEventId,
+            long productId,
+            RuntimeException persistenceFailure
+    ) {
+        rememberGateMode(saleEventId, productId, GateMode.REDIS_FAILOVER_PAUSED);
+        try {
+            redisAdmissionGateway.pauseAdmission(
+                    productId,
+                    saleEventId,
+                    properties.redisFailoverRetryAfter(),
+                    ADMISSION_PERSISTENCE_UNAVAILABLE
+            );
+        } catch (RuntimeException pauseFailure) {
+            log.warn(
+                    "Redis admission persistence pause marker could not be written; local pause remains active saleEventId={} productId={}",
+                    saleEventId,
+                    productId,
+                    pauseFailure
+            );
+        }
+        log.warn(
+                "Redis admission paused because MySQL official admission persistence failed saleEventId={} productId={}",
+                saleEventId,
+                productId,
+                persistenceFailure
+        );
+    }
+
+    private void compensateRedisAdmissionIfNewlyCreated(
+            long saleEventId,
+            long productId,
+            long userId,
+            RedisAdmissionGateway.Result result
+    ) {
+        if (!result.newlyCreated()) {
+            return;
+        }
+        try {
+            boolean compensated = redisAdmissionGateway.compensateAdmission(
+                    productId,
+                    saleEventId,
+                    userId,
+                    result.redisSeq()
+            );
+            if (!compensated) {
+                log.warn(
+                        "Redis admission compensation skipped because candidate changed saleEventId={} productId={} userId={} redisSeq={}",
+                        saleEventId,
+                        productId,
+                        userId,
+                        result.redisSeq()
+                );
+            }
+        } catch (RuntimeException compensationFailure) {
+            log.warn(
+                    "Redis admission compensation failed; admission remains paused saleEventId={} productId={} userId={} redisSeq={}",
                     saleEventId,
                     productId,
                     userId,
-                    bookingAttemptId,
-                    GateMode.REDIS,
                     result.redisSeq(),
-                    properties.candidateLimit()
+                    compensationFailure
             );
-        });
+        }
     }
 
     private AdmissionDecision persistRedisAdmission(
@@ -349,6 +448,17 @@ public class BookingAdmissionService {
     private static final class RedisAdmissionFailureException extends RuntimeException {
 
         RedisAdmissionFailureException(RuntimeException cause) {
+            super(cause);
+        }
+
+        RuntimeException cause() {
+            return (RuntimeException) getCause();
+        }
+    }
+
+    private static final class AdmissionPersistenceUnavailableException extends RuntimeException {
+
+        AdmissionPersistenceUnavailableException(RuntimeException cause) {
             super(cause);
         }
 

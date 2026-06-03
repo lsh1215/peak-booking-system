@@ -105,6 +105,33 @@ class RedisAdmissionGatewayTest {
     }
 
     @Test
+    void should_report_success_when_compensation_deletes_matching_candidate() {
+        RedisConnection connection = mock(RedisConnection.class);
+        StringRedisTemplate redisTemplate = redisTemplate(connection);
+        when(connection.eval(any(byte[].class), eq(ReturnType.INTEGER), eq(2), any(byte[][].class)))
+                .thenReturn(1L);
+        RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 0, Duration.ZERO);
+
+        boolean compensated = gateway.compensateAdmission(1, 1, 101, 7);
+
+        assertThat(compensated).isTrue();
+        verify(connection).eval(any(byte[].class), eq(ReturnType.INTEGER), eq(2), any(byte[][].class));
+    }
+
+    @Test
+    void should_report_false_when_compensation_candidate_does_not_match() {
+        RedisConnection connection = mock(RedisConnection.class);
+        StringRedisTemplate redisTemplate = redisTemplate(connection);
+        when(connection.eval(any(byte[].class), eq(ReturnType.INTEGER), eq(2), any(byte[][].class)))
+                .thenReturn(0L);
+        RedisAdmissionGateway gateway = new RedisAdmissionGateway(redisTemplate, 0, Duration.ZERO);
+
+        boolean compensated = gateway.compensateAdmission(1, 1, 101, 7);
+
+        assertThat(compensated).isFalse();
+    }
+
+    @Test
     void should_fail_probe_when_recovery_write_is_not_replicated() throws Exception {
         RedisConnection connection = mock(RedisConnection.class);
         nativeCommands(connection, 0L);

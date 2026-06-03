@@ -45,6 +45,20 @@ public class RedisAdmissionGateway {
             redis.call('EXPIRE', seqKey, ttlSeconds)
             return {'ADMITTED', tostring(seq)}
             """;
+    private static final String COMPENSATE_LUA = """
+            local usersKey = KEYS[1]
+            local queueKey = KEYS[2]
+            local userId = ARGV[1]
+            local redisSeq = ARGV[2]
+
+            local existing = redis.call('HGET', usersKey, userId)
+            if existing == redisSeq then
+                redis.call('HDEL', usersKey, userId)
+                redis.call('ZREM', queueKey, userId)
+                return 1
+            end
+            return 0
+            """;
 
     private final StringRedisTemplate redisTemplate;
     private final int waitReplicas;
@@ -67,7 +81,7 @@ public class RedisAdmissionGateway {
     }
 
     public Result tryAdmit(long productId, long saleEventId, long userId, int candidateLimit) {
-        String prefix = "admit:" + productId + ":" + saleEventId;
+        String prefix = admissionPrefix(productId, saleEventId);
         List<?> response = redisTemplate.execute((RedisCallback<List<?>>) connection -> {
             List<?> result = connection.eval(
                     LUA.getBytes(StandardCharsets.UTF_8),
@@ -98,6 +112,35 @@ public class RedisAdmissionGateway {
         boolean admitted = "ADMITTED".equals(status) || "EXISTING".equals(status);
         long seq = Long.parseLong(stringValue(response.get(1)));
         return new Result(admitted, seq, "ADMITTED".equals(status));
+    }
+
+    public boolean isAdmissionPaused(long productId, long saleEventId) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(pauseKey(productId, saleEventId)));
+    }
+
+    public void pauseAdmission(long productId, long saleEventId, Duration ttl, String reason) {
+        Duration effectiveTtl = ttl.isZero() || ttl.isNegative() ? Duration.ofSeconds(1) : ttl;
+        redisTemplate.opsForValue().set(pauseKey(productId, saleEventId), reason, effectiveTtl);
+    }
+
+    public boolean compensateAdmission(long productId, long saleEventId, long userId, long redisSeq) {
+        String prefix = admissionPrefix(productId, saleEventId);
+        Long result = redisTemplate.execute((RedisCallback<Long>) connection -> {
+            Object value = connection.eval(
+                    COMPENSATE_LUA.getBytes(StandardCharsets.UTF_8),
+                    ReturnType.INTEGER,
+                    2,
+                    bytes(prefix + ":users"),
+                    bytes(prefix + ":queue"),
+                    bytes(userId),
+                    bytes(redisSeq)
+            );
+            if (value instanceof Number number) {
+                return number.longValue();
+            }
+            return 0L;
+        });
+        return result != null && result == 1L;
     }
 
     public boolean ping() {
@@ -168,6 +211,14 @@ public class RedisAdmissionGateway {
 
     private byte[] bytes(Object value) {
         return String.valueOf(value).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String admissionPrefix(long productId, long saleEventId) {
+        return "admit:" + productId + ":" + saleEventId;
+    }
+
+    private String pauseKey(long productId, long saleEventId) {
+        return admissionPrefix(productId, saleEventId) + ":pause";
     }
 
     private String stringValue(Object value) {

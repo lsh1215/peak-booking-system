@@ -5,19 +5,16 @@ import com.peakbooking.booking.domain.GateMode;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class AdmissionTransactionService {
 
     private final BookingJpaRepository repository;
     private final Clock clock;
-
-    public AdmissionTransactionService(BookingJpaRepository repository, Clock clock) {
-        this.repository = repository;
-        this.clock = clock;
-    }
 
     @Transactional
     public AdmissionDecision createAdmission(
