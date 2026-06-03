@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ../base
   - ../observability
+  - redis-ha.yaml
   - ingress.yaml
   - traefik-rate-limit.yaml
 

@@ -38,6 +38,17 @@ spec:
         - name: redis
           image: redis:7.4-alpine
           imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - >-
+              redis-server
+              --min-replicas-to-write "${REDIS_MIN_REPLICAS_TO_WRITE}"
+              --min-replicas-max-lag "${REDIS_MIN_REPLICAS_MAX_LAG_SECONDS}"
+          env:
+            - name: REDIS_MIN_REPLICAS_TO_WRITE
+              value: "0"
+            - name: REDIS_MIN_REPLICAS_MAX_LAG_SECONDS
+              value: "2"
           ports:
             - name: redis
               containerPort: 6379
