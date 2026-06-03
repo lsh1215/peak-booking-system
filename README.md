@@ -35,7 +35,7 @@
 
 이 조건에서 모든 요청을 깊은 DB transaction까지 들여보내면 성공 예약은 10건뿐인데 실패 요청이 DB를 압박합니다. 그래서 정상 경로는 Redis admission gate가 빠르게 후보를 거르고, MySQL은 공식 admission ledger와 최종 정합성 원장으로 사용합니다. 상품 가격/오픈 시각 같은 metadata read는 짧은 TTL cache로 보호하며, 핵심 목표는 inventory write path를 피크 전체 요청에서 분리하는 것입니다.
 
-Redis는 최종 재고 원장이 아닙니다. Redis HA로 정상 admission을 빠르게 처리하되, Redis failover 중에는 request thread가 DB로 직접 우회하지 않습니다. 대신 WAS-local bounded queue가 요청을 `202 LOCAL_QUEUE_ACCEPTED`로 받아두고, background worker가 설정된 속도로만 MySQL admission ledger를 갱신합니다. Redis half-open probe가 성공해도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청은 로컬 큐에 유지합니다.
+Redis는 최종 재고 원장이 아닙니다. Redis HA로 정상 admission을 빠르게 처리하되, Redis failover 중에는 request thread가 DB로 직접 우회하지 않습니다. 대신 작은 WAS-local bounded queue가 일부 요청만 `202 LOCAL_QUEUE_ACCEPTED`로 받아두고, background worker가 설정된 속도로만 MySQL admission ledger를 갱신합니다. queue capacity 또는 장애 episode 수용 예산을 넘은 요청은 `429 LOCAL_QUEUE_FULL`로 버립니다. Redis half-open probe가 성공해도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청은 로컬 큐에 유지합니다.
 
 ## 아키텍처
 

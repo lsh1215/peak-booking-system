@@ -41,7 +41,8 @@ peak-booking:
   redis-wait-timeout: ${PEAK_BOOKING_REDIS_WAIT_TIMEOUT:0ms}
   local-queue:
     enabled: ${PEAK_BOOKING_LOCAL_QUEUE_ENABLED:true}
-    capacity: ${PEAK_BOOKING_LOCAL_QUEUE_CAPACITY:2000}
+    capacity: ${PEAK_BOOKING_LOCAL_QUEUE_CAPACITY:300}
+    max-accepted-per-outage: ${PEAK_BOOKING_LOCAL_QUEUE_MAX_ACCEPTED_PER_OUTAGE:300}
     worker-batch-size: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_BATCH_SIZE:1}
     worker-fixed-delay: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_FIXED_DELAY:100ms}
     drain-grace: ${PEAK_BOOKING_LOCAL_QUEUE_DRAIN_GRACE:30s}

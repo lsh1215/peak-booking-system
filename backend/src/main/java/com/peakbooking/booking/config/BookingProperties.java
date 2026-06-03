@@ -33,6 +33,7 @@ public record BookingProperties(
     public record LocalQueue(
             boolean enabled,
             int capacity,
+            int maxAcceptedPerOutage,
             int workerBatchSize,
             Duration workerFixedDelay,
             Duration drainGrace,

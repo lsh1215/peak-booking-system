@@ -122,12 +122,13 @@ Failure policy:
   Sentinel failover 감지
   Redis command timeout
   -> request thread는 DB admission을 직접 수행하지 않음
-  -> bounded WAS-local queue에 offer
+  -> small bounded WAS-local queue에 offer
   -> 성공 시 202 LOCAL_QUEUE_ACCEPTED + booking_attempt_id
-  -> queue full 시 429 LOCAL_QUEUE_FULL + Retry-After
+  -> queue full 또는 장애 episode 수용 예산 초과 시 429 LOCAL_QUEUE_FULL + Retry-After
 
 Local queue policy:
-  ArrayBlockingQueue(capacity 예: WAS당 2,000)
+  ArrayBlockingQueue(capacity 기본 WAS당 300)
+  maxAcceptedPerOutage 기본 WAS당 300
   booking_attempt_id + request_hash로 로컬 dedupe/conflict 방지
   worker는 fixedDelay/batchSize로 DB admission을 throttling
   DB admission은 LOCAL_QUEUE gate_mode로 MySQL official ledger에 기록
@@ -154,7 +155,7 @@ Recovery policy:
 | k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 원시 결과는 `loadtest-results/`에 보존하되 Git 추적 제외 |
 | Redis master failover k6 | Sentinel failover 중 local queue accepted/full 비율, drain 시간, DB pressure, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
 
-따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 성공시킨다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 request thread의 직접 DB fallback을 막으며, bounded local queue와 throttled worker로만 제한적으로 판매를 이어가고, Redis half-open probe 성공 후에도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청을 로컬 큐에 유지한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
+따라서 이 결정의 핵심 주장은 **"failover 중에도 모든 요청을 성공시킨다"가** 아니다. 핵심은 **"Redis HA로 장애 시간을 줄이고, failover 중에는 request thread의 직접 DB fallback을 막으며, 작은 bounded local queue와 장애 episode 수용 예산 안에서만 제한적으로 판매를 이어가고, Redis half-open probe 성공 후에도 local queue가 비거나 복구 시점부터 drain-grace가 지날 때까지 새 요청을 로컬 큐에 유지한다"는** 것이다. Redis master failover의 최종 성능 수치는 [부하 테스트 증거 인덱스](../testing/loadtest-evidence-index.md)에 최신 실행 결과를 연결해 갱신한다.
 
 ---
 

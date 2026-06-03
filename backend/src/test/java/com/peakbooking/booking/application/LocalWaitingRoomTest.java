@@ -91,6 +91,21 @@ class LocalWaitingRoomTest {
         assertThat(waitingRoom.activeCount()).isEqualTo(1);
     }
 
+    @Test
+    void should_shed_when_outage_acceptance_budget_is_exhausted_even_if_capacity_remains() {
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties(5, 2, Duration.ofSeconds(30)));
+
+        waitingRoom.markRedisUnavailable();
+        LocalQueueSubmission first = waitingRoom.enqueue(command(101), "attempt-101", "hash-101");
+        LocalQueueSubmission second = waitingRoom.enqueue(command(102), "attempt-102", "hash-102");
+        LocalQueueSubmission third = waitingRoom.enqueue(command(103), "attempt-103", "hash-103");
+
+        assertThat(first.status()).isEqualTo(LocalQueueSubmission.Status.ACCEPTED);
+        assertThat(second.status()).isEqualTo(LocalQueueSubmission.Status.ACCEPTED);
+        assertThat(third.status()).isEqualTo(LocalQueueSubmission.Status.FULL);
+        assertThat(waitingRoom.queuedCount()).isEqualTo(2);
+    }
+
     private BookingCommand command(long userId) {
         return new BookingCommand(
                 userId,
@@ -120,6 +135,10 @@ class LocalWaitingRoomTest {
     }
 
     private BookingProperties properties(int capacity, Duration drainGrace) {
+        return properties(capacity, capacity, drainGrace);
+    }
+
+    private BookingProperties properties(int capacity, int maxAcceptedPerOutage, Duration drainGrace) {
         BookingProperties base = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
         return new BookingProperties(
                 base.saleEventId(),
@@ -135,6 +154,7 @@ class LocalWaitingRoomTest {
                 new BookingProperties.LocalQueue(
                         true,
                         capacity,
+                        maxAcceptedPerOutage,
                         1,
                         Duration.ofMillis(100),
                         drainGrace,

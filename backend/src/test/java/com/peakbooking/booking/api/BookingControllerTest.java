@@ -103,6 +103,7 @@ class BookingControllerTest {
                 new BookingProperties.LocalQueue(
                         true,
                         2,
+                        2,
                         1,
                         Duration.ofMillis(100),
                         Duration.ofSeconds(30),

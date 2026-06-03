@@ -78,6 +78,7 @@ class LocalQueueConsumerTest {
                 new BookingProperties.LocalQueue(
                         true,
                         10,
+                        10,
                         1,
                         Duration.ofMillis(100),
                         Duration.ofSeconds(30),

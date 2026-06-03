@@ -8,6 +8,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,8 @@ public class LocalWaitingRoom {
     private final ConcurrentMap<String, Entry> entries = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
     private final AtomicLong recoveredAtNanos = new AtomicLong();
+    private final AtomicLong acceptedInCurrentOutage = new AtomicLong();
+    private final AtomicBoolean outageEpisodeActive = new AtomicBoolean();
 
     public LocalWaitingRoom(BookingProperties properties) {
         this.properties = properties;
@@ -36,16 +39,21 @@ public class LocalWaitingRoom {
         if (existing != null) {
             return existingSubmission(existing, requestHash);
         }
+        if (!tryAcquireOutageBudget()) {
+            return new LocalQueueSubmission(LocalQueueSubmission.Status.FULL, bookingAttemptId, 0, null);
+        }
 
         long localSequence = sequence.incrementAndGet();
         LocalQueuedBooking queued = new LocalQueuedBooking(command, bookingAttemptId, requestHash, localSequence);
         Entry entry = Entry.queued(queued);
         Entry concurrent = entries.putIfAbsent(bookingAttemptId, entry);
         if (concurrent != null) {
+            releaseOutageBudget();
             return existingSubmission(concurrent, requestHash);
         }
         if (!waitingQueue.offer(queued)) {
             entries.remove(bookingAttemptId, entry);
+            releaseOutageBudget();
             return new LocalQueueSubmission(LocalQueueSubmission.Status.FULL, bookingAttemptId, 0, null);
         }
         return new LocalQueueSubmission(
@@ -75,7 +83,7 @@ public class LocalWaitingRoom {
             return false;
         }
         if (activeCount() == 0) {
-            recoveredAtNanos.set(0);
+            clearOutageEpisode();
             return false;
         }
         long recoveredAt = recoveredAtNanos.get();
@@ -90,13 +98,16 @@ public class LocalWaitingRoom {
     }
 
     public void markRedisUnavailable() {
+        if (outageEpisodeActive.compareAndSet(false, true)) {
+            acceptedInCurrentOutage.set(0);
+        }
         recoveredAtNanos.set(0);
     }
 
     public boolean markRedisRecovered() {
         cleanupCompletedResults();
         if (!properties.localQueue().enabled() || activeCount() == 0) {
-            recoveredAtNanos.set(0);
+            clearOutageEpisode();
             return false;
         }
         long now = System.nanoTime();
@@ -136,9 +147,13 @@ public class LocalWaitingRoom {
 
     public int activeCount() {
         cleanupCompletedResults();
-        return (int) entries.values().stream()
+        int active = (int) entries.values().stream()
                 .filter(entry -> entry.state == State.QUEUED || entry.state == State.RUNNING)
                 .count();
+        if (active == 0) {
+            clearOutageEpisode();
+        }
+        return active;
     }
 
     private LocalQueueSubmission existingSubmission(Entry existing, String requestHash) {
@@ -176,6 +191,22 @@ public class LocalWaitingRoom {
                 .filter(entry -> entry.queued.localSequence() <= target.queued.localSequence())
                 .sorted(Comparator.comparingLong(entry -> entry.queued.localSequence()))
                 .count();
+    }
+
+    private boolean tryAcquireOutageBudget() {
+        int budget = Math.max(1, properties.localQueue().maxAcceptedPerOutage());
+        long accepted = acceptedInCurrentOutage.incrementAndGet();
+        return accepted <= budget;
+    }
+
+    private void releaseOutageBudget() {
+        acceptedInCurrentOutage.updateAndGet(current -> Math.max(0, current - 1));
+    }
+
+    private void clearOutageEpisode() {
+        recoveredAtNanos.set(0);
+        acceptedInCurrentOutage.set(0);
+        outageEpisodeActive.set(false);
     }
 
     private void cleanupCompletedResults() {
