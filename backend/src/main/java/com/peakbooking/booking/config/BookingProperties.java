@@ -37,6 +37,9 @@ public record BookingProperties(
             int workerBatchSize,
             Duration workerFixedDelay,
             Duration drainGrace,
+            int maxRetryAttempts,
+            Duration retryBackoff,
+            Duration maxRetryAge,
             Duration resultRetention
     ) {
     }

@@ -14,6 +14,7 @@ import com.peakbooking.booking.domain.PaymentPlanLine;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.QueryTimeoutException;
 
 class LocalQueueConsumerTest {
 
@@ -32,6 +33,68 @@ class LocalQueueConsumerTest {
         assertThat(processed).isEqualTo(1);
         assertThat(waitingRoom.activeCount()).isEqualTo(1);
         verify(bookingApplicationService, times(1)).processLocalQueued(any());
+    }
+
+    @Test
+    void should_requeue_transient_db_failure_without_completing_attempt() {
+        BookingProperties properties = properties();
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties);
+        BookingApplicationService bookingApplicationService = mock(BookingApplicationService.class);
+        LocalQueueConsumer consumer = new LocalQueueConsumer(properties, waitingRoom, bookingApplicationService);
+        BookingCommand command = command(101);
+        waitingRoom.enqueue(command, "attempt-101", "hash-101");
+        when(bookingApplicationService.processLocalQueued(command))
+                .thenThrow(new QueryTimeoutException("db busy"))
+                .thenReturn(result("attempt-101"));
+
+        int firstDrain = consumer.drainOnce();
+        int secondDrain = consumer.drainOnce();
+
+        assertThat(firstDrain).isEqualTo(1);
+        assertThat(secondDrain).isEqualTo(1);
+        assertThat(waitingRoom.activeCount()).isZero();
+        assertThat(waitingRoom.status("attempt-101").orElseThrow().businessCode())
+                .isEqualTo("BOOKING_IN_PROGRESS");
+        verify(bookingApplicationService, times(2)).processLocalQueued(command);
+    }
+
+    @Test
+    void should_complete_as_unavailable_after_retry_budget_is_exhausted() {
+        BookingProperties properties = properties(1, Duration.ZERO, Duration.ofSeconds(30));
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties);
+        BookingApplicationService bookingApplicationService = mock(BookingApplicationService.class);
+        LocalQueueConsumer consumer = new LocalQueueConsumer(properties, waitingRoom, bookingApplicationService);
+        BookingCommand command = command(101);
+        waitingRoom.enqueue(command, "attempt-101", "hash-101");
+        when(bookingApplicationService.processLocalQueued(command))
+                .thenThrow(new QueryTimeoutException("db busy"));
+
+        consumer.drainOnce();
+        consumer.drainOnce();
+
+        assertThat(waitingRoom.activeCount()).isZero();
+        assertThat(waitingRoom.status("attempt-101").orElseThrow().businessCode())
+                .isEqualTo("LOCAL_QUEUE_PROCESSING_UNAVAILABLE");
+        verify(bookingApplicationService, times(2)).processLocalQueued(command);
+    }
+
+    @Test
+    void should_wait_for_retry_backoff_before_processing_again() {
+        BookingProperties properties = properties(3, Duration.ofSeconds(30), Duration.ofSeconds(30));
+        LocalWaitingRoom waitingRoom = new LocalWaitingRoom(properties);
+        BookingApplicationService bookingApplicationService = mock(BookingApplicationService.class);
+        LocalQueueConsumer consumer = new LocalQueueConsumer(properties, waitingRoom, bookingApplicationService);
+        BookingCommand command = command(101);
+        waitingRoom.enqueue(command, "attempt-101", "hash-101");
+        when(bookingApplicationService.processLocalQueued(command))
+                .thenThrow(new QueryTimeoutException("db busy"));
+
+        consumer.drainOnce();
+        int skipped = consumer.drainOnce();
+
+        assertThat(skipped).isZero();
+        assertThat(waitingRoom.activeCount()).isEqualTo(1);
+        verify(bookingApplicationService, times(1)).processLocalQueued(command);
     }
 
     private BookingCommand command(long userId) {
@@ -63,6 +126,10 @@ class LocalQueueConsumerTest {
     }
 
     private BookingProperties properties() {
+        return properties(3, Duration.ZERO, Duration.ofSeconds(30));
+    }
+
+    private BookingProperties properties(int maxRetryAttempts, Duration retryBackoff, Duration maxRetryAge) {
         BookingProperties base = BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2);
         return new BookingProperties(
                 base.saleEventId(),
@@ -82,6 +149,9 @@ class LocalQueueConsumerTest {
                         1,
                         Duration.ofMillis(100),
                         Duration.ofSeconds(30),
+                        maxRetryAttempts,
+                        retryBackoff,
+                        maxRetryAge,
                         Duration.ofSeconds(60)
                 ),
                 base.bulkhead(),

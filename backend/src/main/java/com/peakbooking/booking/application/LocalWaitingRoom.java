@@ -44,7 +44,13 @@ public class LocalWaitingRoom {
         }
 
         long localSequence = sequence.incrementAndGet();
-        LocalQueuedBooking queued = new LocalQueuedBooking(command, bookingAttemptId, requestHash, localSequence);
+        LocalQueuedBooking queued = LocalQueuedBooking.initial(
+                command,
+                bookingAttemptId,
+                requestHash,
+                localSequence,
+                System.nanoTime()
+        );
         Entry entry = Entry.queued(queued);
         Entry concurrent = entries.putIfAbsent(bookingAttemptId, entry);
         if (concurrent != null) {
@@ -69,8 +75,25 @@ public class LocalWaitingRoom {
         if (queued == null) {
             return null;
         }
+        long now = System.nanoTime();
+        if (queued.nextAttemptAtNanos() > now) {
+            if (!waitingQueue.offer(queued)) {
+                entries.computeIfPresent(queued.bookingAttemptId(), (ignored, entry) -> entry.markRunning());
+                return queued;
+            }
+            return null;
+        }
         entries.computeIfPresent(queued.bookingAttemptId(), (ignored, entry) -> entry.markRunning());
         return queued;
+    }
+
+    public boolean requeue(LocalQueuedBooking queued) {
+        entries.computeIfPresent(queued.bookingAttemptId(), (ignored, entry) -> entry.markQueued(queued));
+        if (waitingQueue.offer(queued)) {
+            return true;
+        }
+        entries.computeIfPresent(queued.bookingAttemptId(), (ignored, entry) -> entry.markRunning());
+        return false;
     }
 
     public void complete(String bookingAttemptId, BookingResult result) {
@@ -255,6 +278,13 @@ public class LocalWaitingRoom {
                 return this;
             }
             return new Entry(queued, State.RUNNING, null, 0);
+        }
+
+        private Entry markQueued(LocalQueuedBooking nextQueued) {
+            if (state == State.COMPLETED) {
+                return this;
+            }
+            return new Entry(nextQueued, State.QUEUED, null, 0);
         }
 
         private Entry markCompleted(BookingResult result) {

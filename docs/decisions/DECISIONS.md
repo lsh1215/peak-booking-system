@@ -131,6 +131,8 @@ Local queue policy:
   maxAcceptedPerOutage 기본 WAS당 300
   booking_attempt_id + request_hash로 로컬 dedupe/conflict 방지
   worker는 fixedDelay/batchSize로 DB admission을 throttling
+  worker가 SERVICE_BUSY, DB timeout, connection failure를 만나면 complete하지 않고 retry/backoff 후 재큐잉
+  retry budget 또는 max retry age를 넘을 때만 LOCAL_QUEUE_PROCESSING_UNAVAILABLE로 terminal 처리
   DB admission은 LOCAL_QUEUE gate_mode로 MySQL official ledger에 기록
   confirmed 수는 MySQL inventory guard로 <= 10 보장
   client는 GET /bookings/status/{booking_attempt_id} 또는 POST replay로 polling
@@ -151,7 +153,7 @@ Recovery policy:
 
 | 증거 | 확인 내용 | 현재 상태 |
 |---|---|---|
-| unit/integration test | Redis failover pause, half-open probe, local queue bounded/dedupe/drain-grace, worker batch 제한, DB fallback 무제한 우회 금지를 코드 수준에서 검증 | repository에 포함 |
+| unit/integration test | Redis failover pause, half-open probe, local queue bounded/dedupe/drain-grace, worker batch 제한, transient DB failure retry, DB fallback 무제한 우회 금지를 코드 수준에서 검증 | repository에 포함 |
 | k6 isolated suite | 정상 peak, 중복 클릭, PG timeout, WAS 1대 down, Redis hard-down, mixed, shared DB pressure를 분리 측정 | 원시 결과는 `loadtest-results/`에 보존하되 Git 추적 제외 |
 | Redis master failover k6 | Sentinel failover 중 local queue accepted/full 비율, drain 시간, DB pressure, half-open recovery를 실측해야 함 | 최신 원시 결과를 제출 증거로 다시 남겨야 함 |
 

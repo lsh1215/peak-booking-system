@@ -158,6 +158,9 @@ class LocalWaitingRoomTest {
                         1,
                         Duration.ofMillis(100),
                         drainGrace,
+                        3,
+                        Duration.ofMillis(500),
+                        Duration.ofSeconds(30),
                         Duration.ofSeconds(60)
                 ),
                 base.bulkhead(),

@@ -401,6 +401,7 @@ sequenceDiagram
 - `WAIT` timeout, min-replica 조건 불만족, Sentinel failover 감지, Redis command timeout이 발생하면 request thread는 새 admission을 DB fallback으로 직접 우회하지 않는다.
 - failover 중 요청은 작은 WAS-local bounded queue에 offer하고, 성공 시 `202 LOCAL_QUEUE_ACCEPTED`, queue full 또는 장애 episode 수용 예산 초과 시 `LOCAL_QUEUE_FULL + Retry-After`로 응답한다.
 - local queue worker는 fixed-delay/batch-size budget 안에서만 MySQL official admission ledger를 기록한다.
+- local queue worker가 `SERVICE_BUSY`, DB timeout, connection failure를 만나면 해당 entry를 완료 처리하지 않고 retry/backoff 후 재큐잉한다. retry budget 또는 max retry age를 초과한 경우에만 terminal unavailable로 고정한다.
 - pause TTL 이후에는 half-open probe를 수행한다. probe는 Redis write + `WAIT`가 성공해야 통과한다.
 - half-open probe가 성공해도 local queue active_count가 0이 되거나 probe 성공 시점부터 drain-grace가 지날 때까지 새 외부 요청은 local queue에 유지한다. 실패하면 Retry-After window 동안 반복 probe를 억제한다.
 - 모든 요청을 DB로 보내는 unlimited fallback은 금지한다.

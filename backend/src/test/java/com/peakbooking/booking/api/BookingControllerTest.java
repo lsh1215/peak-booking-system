@@ -107,6 +107,9 @@ class BookingControllerTest {
                         1,
                         Duration.ofMillis(100),
                         Duration.ofSeconds(30),
+                        3,
+                        Duration.ofMillis(500),
+                        Duration.ofSeconds(30),
                         Duration.ofSeconds(60)
                 ),
                 new BookingProperties.Bulkhead(6, 5, 1, 2, 16),

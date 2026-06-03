@@ -46,6 +46,9 @@ peak-booking:
     worker-batch-size: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_BATCH_SIZE:1}
     worker-fixed-delay: ${PEAK_BOOKING_LOCAL_QUEUE_WORKER_FIXED_DELAY:100ms}
     drain-grace: ${PEAK_BOOKING_LOCAL_QUEUE_DRAIN_GRACE:30s}
+    max-retry-attempts: ${PEAK_BOOKING_LOCAL_QUEUE_MAX_RETRY_ATTEMPTS:3}
+    retry-backoff: ${PEAK_BOOKING_LOCAL_QUEUE_RETRY_BACKOFF:500ms}
+    max-retry-age: ${PEAK_BOOKING_LOCAL_QUEUE_MAX_RETRY_AGE:30s}
     result-retention: ${PEAK_BOOKING_LOCAL_QUEUE_RESULT_RETENTION:60s}
   bulkhead:
     booking-write-concurrency: ${PEAK_BOOKING_BOOKING_WRITE_CONCURRENCY:6}
