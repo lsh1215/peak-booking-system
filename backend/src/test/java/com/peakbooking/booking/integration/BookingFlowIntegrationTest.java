@@ -10,7 +10,10 @@ import com.peakbooking.booking.application.BookingResult;
 import com.peakbooking.booking.application.CanonicalRequestHashCalculator;
 import com.peakbooking.booking.application.CheckoutApplicationService;
 import com.peakbooking.booking.application.MockPgScenario;
+import com.peakbooking.booking.domain.AdmissionDecision;
+import com.peakbooking.booking.domain.AdmissionResult;
 import com.peakbooking.booking.domain.BookingErrorCode;
+import com.peakbooking.booking.domain.GateMode;
 import com.peakbooking.booking.domain.PaymentMethodType;
 import com.peakbooking.booking.domain.PaymentPlan;
 import com.peakbooking.booking.domain.PaymentPlanLine;
@@ -447,26 +450,34 @@ class BookingFlowIntegrationTest extends BookingIntegrationTestSupport {
     }
 
     @Test
-    void should_keep_db_fallback_sticky_for_same_sale_event_even_when_redis_is_available() {
+    void should_reopen_paused_admission_gate_when_redis_half_open_probe_succeeds() {
         seedProductAndInventory(10);
         seedPoints(1, 0);
-        markDbFallback();
+        markRedisFailoverPaused();
 
         BookingResult result = bookingApplicationService.book(command(1));
 
+        assertThat(result.httpStatus()).isEqualTo(201);
         assertThat(result.businessCode()).isEqualTo("BOOKING_CONFIRMED");
+        assertThat(count("booking_admission")).isEqualTo(1);
+        Long nextSeq = jdbcTemplate.queryForObject(
+                "SELECT next_seq FROM admission_sequence WHERE sale_event_id = 1 AND product_id = 1",
+                Long.class
+        );
         String gateMode = jdbcTemplate.queryForObject(
-                "SELECT gate_mode FROM booking_admission WHERE user_id = 1",
+                "SELECT gate_mode FROM admission_sequence WHERE sale_event_id = 1 AND product_id = 1",
                 String.class
         );
-        assertThat(gateMode).isEqualTo("DB_FALLBACK");
+        assertThat(nextSeq).isEqualTo(1);
+        assertThat(gateMode).isEqualTo("REDIS");
     }
 
     @Test
-    void should_not_consume_candidate_sequence_for_duplicate_db_fallback_admission() throws Exception {
+    void should_not_amplify_candidate_sequence_for_concurrent_posts_while_half_opening_paused_gate()
+            throws Exception {
         seedProductAndInventory(10);
         seedPoints(1, 0);
-        markDbFallback();
+        markRedisFailoverPaused();
 
         try (var executor = Executors.newFixedThreadPool(12)) {
             List<Callable<BookingResult>> tasks = java.util.stream.IntStream.range(0, 20)
@@ -479,8 +490,70 @@ class BookingFlowIntegrationTest extends BookingIntegrationTestSupport {
                 "SELECT next_seq FROM admission_sequence WHERE sale_event_id = 1 AND product_id = 1",
                 Long.class
         );
-        assertThat(nextSeq).isEqualTo(1);
-        assertThat(count("booking_admission")).isEqualTo(1);
+        assertThat(nextSeq).isLessThanOrEqualTo(1);
+        assertThat(count("booking_admission")).isLessThanOrEqualTo(1);
+    }
+
+    @Test
+    void should_recheck_paused_gate_inside_admission_transaction_even_after_redis_admits() {
+        markRedisFailoverPaused();
+
+        AdmissionDecision decision = transactionTemplate.execute(status -> repository.createAdmission(
+                1,
+                1,
+                1,
+                "attempt-1",
+                GateMode.REDIS,
+                1L,
+                30,
+                now()
+        ));
+
+        assertThat(decision).isNotNull();
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(count("booking_admission")).isZero();
+        Long nextSeq = jdbcTemplate.queryForObject(
+                "SELECT next_seq FROM admission_sequence WHERE sale_event_id = 1 AND product_id = 1",
+                Long.class
+        );
+        assertThat(nextSeq).isZero();
+    }
+
+    @Test
+    void should_not_reuse_existing_admission_for_new_write_when_gate_is_paused() {
+        seedProductAndInventory(10);
+        seedPoints(1, 0);
+        BookingResult admitted = bookingApplicationService.book(command(1));
+        jdbcTemplate.update("DELETE FROM payment_attempt");
+        jdbcTemplate.update("DELETE FROM reservation");
+        jdbcTemplate.update("DELETE FROM idempotency_record");
+        jdbcTemplate.update("""
+                UPDATE sale_inventory
+                SET reserved_count = 0, payment_unknown_count = 0, confirmed_count = 0
+                WHERE sale_event_id = 1 AND product_id = 1
+                """);
+        jdbcTemplate.update("""
+                UPDATE admission_sequence
+                SET gate_mode = 'REDIS_FAILOVER_PAUSED'
+                WHERE sale_event_id = 1 AND product_id = 1
+                """);
+
+        AdmissionDecision decision = transactionTemplate.execute(status -> repository.createAdmission(
+                1,
+                1,
+                1,
+                "attempt-later",
+                GateMode.REDIS,
+                1L,
+                30,
+                now()
+        ));
+
+        assertThat(admitted.businessCode()).isEqualTo("BOOKING_CONFIRMED");
+        assertThat(decision).isNotNull();
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
     }
 
     @Test
@@ -737,12 +810,12 @@ class BookingFlowIntegrationTest extends BookingIntegrationTestSupport {
         return LocalDateTime.now(clock);
     }
 
-    private void markDbFallback() {
+    private void markRedisFailoverPaused() {
         jdbcTemplate.update(
                 """
                         INSERT INTO admission_sequence (sale_event_id, product_id, next_seq, gate_mode)
-                        VALUES (1, 1, 0, 'DB_FALLBACK')
-                        ON DUPLICATE KEY UPDATE gate_mode = 'DB_FALLBACK'
+                        VALUES (1, 1, 0, 'REDIS_FAILOVER_PAUSED')
+                        ON DUPLICATE KEY UPDATE gate_mode = 'REDIS_FAILOVER_PAUSED'
                         """
         );
     }

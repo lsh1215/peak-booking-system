@@ -30,7 +30,7 @@ class BookingApplicationServiceTest {
 
     @Test
     void should_reject_db_write_when_db_write_bulkhead_is_full() {
-        BookingDbWriteBulkhead bulkhead = new BookingDbWriteBulkhead(propertiesWithBulkhead(0, 2, 5, 1, 2));
+        BookingDbWriteBulkhead bulkhead = new BookingDbWriteBulkhead(propertiesWithBulkhead(0, 5, 1, 2));
 
         assertThatThrownBy(() -> bulkhead.execute(() -> "write"))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -47,7 +47,7 @@ class BookingApplicationServiceTest {
         BookingAdmissionService admissionService = mock(BookingAdmissionService.class);
         BookingTransactionService transactionService = mock(BookingTransactionService.class);
         PaymentCallGuard paymentCallGuard = mock(PaymentCallGuard.class);
-        BookingProperties properties = propertiesWithBulkhead(6, 2, 5, 1, 2);
+        BookingProperties properties = propertiesWithBulkhead(6, 5, 1, 2);
         Clock clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
         BookingApplicationService service = new BookingApplicationService(
                 properties,
@@ -116,10 +116,27 @@ class BookingApplicationServiceTest {
 
     static BookingProperties propertiesWithBulkhead(
             int bookingWriteConcurrency,
-            int dbFallbackConcurrency,
             int pgConfirmConcurrency,
             int recoveryPgConcurrency,
             int checkoutReadConcurrency
+    ) {
+        return propertiesWithBulkhead(
+                bookingWriteConcurrency,
+                pgConfirmConcurrency,
+                recoveryPgConcurrency,
+                checkoutReadConcurrency,
+                16,
+                Duration.ofSeconds(2)
+        );
+    }
+
+    static BookingProperties propertiesWithBulkhead(
+            int bookingWriteConcurrency,
+            int pgConfirmConcurrency,
+            int recoveryPgConcurrency,
+            int checkoutReadConcurrency,
+            int redisAdmissionConcurrency,
+            Duration redisFailoverRetryAfter
     ) {
         return new BookingProperties(
                 1,
@@ -131,12 +148,13 @@ class BookingApplicationServiceTest {
                 Duration.ofSeconds(60),
                 Duration.ofHours(24),
                 Duration.ofMinutes(5),
+                redisFailoverRetryAfter,
                 new BookingProperties.Bulkhead(
                         bookingWriteConcurrency,
-                        dbFallbackConcurrency,
                         pgConfirmConcurrency,
                         recoveryPgConcurrency,
-                        checkoutReadConcurrency
+                        checkoutReadConcurrency,
+                        redisAdmissionConcurrency
                 ),
                 new BookingProperties.Payment(
                         Duration.ofMillis(500),

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.peakbooking.booking.config.BookingProperties;
 import com.peakbooking.booking.domain.AdmissionDecision;
 import com.peakbooking.booking.domain.AdmissionResult;
 import com.peakbooking.booking.domain.BookingErrorCode;
@@ -21,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisSystemException;
 
@@ -31,12 +33,15 @@ class BookingAdmissionServiceTest {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 1, Duration.ofSeconds(2)
+        );
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2),
+                properties,
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2)),
+                new BookingDbWriteBulkhead(properties),
                 Duration.ofSeconds(1)
         );
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
@@ -60,11 +65,11 @@ class BookingAdmissionServiceTest {
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(0, 2, 5, 1, 2),
+                BookingApplicationServiceTest.propertiesWithBulkhead(0, 5, 1, 2),
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(0, 2, 5, 1, 2)),
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(0, 5, 1, 2)),
                 Duration.ofSeconds(1)
         );
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
@@ -78,113 +83,372 @@ class BookingAdmissionServiceTest {
     }
 
     @Test
-    void should_keep_db_fallback_admission_under_booking_write_bulkhead() {
+    void should_reject_paused_gate_when_half_open_probe_is_not_ready() {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(0, 2, 5, 1, 2),
+                BookingApplicationServiceTest.propertiesWithBulkhead(0, 5, 1, 2),
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(0, 2, 5, 1, 2)),
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(0, 5, 1, 2)),
                 Duration.ofSeconds(1)
         );
-        when(repository.gateMode(1, 1)).thenReturn(GateMode.DB_FALLBACK);
-
-        assertThatThrownBy(() -> service.admit(1, 1, 101, "attempt-101"))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(BookingErrorCode.SERVICE_BUSY));
-
-        verifyNoInteractions(redisAdmissionGateway);
-        verifyNoInteractions(transactionService);
-    }
-
-    @Test
-    void should_retry_once_before_switching_healthy_redis_to_db_fallback() {
-        BookingJpaRepository repository = mock(BookingJpaRepository.class);
-        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
-        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
-        BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2),
-                repository,
-                redisAdmissionGateway,
-                transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2)),
-                Duration.ofSeconds(1)
-        );
-        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
-        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenThrow(new RedisSystemException("transient redis timeout", new RuntimeException("timeout")))
-                .thenReturn(new RedisAdmissionGateway.Result(true, 1));
-        when(transactionService.createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30))
-                .thenReturn(AdmissionDecision.admitted(10, 1, 1L, 1, GateMode.REDIS));
-
-        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
-
-        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS);
-        assertThat(decision.redisSeq()).isEqualTo(1L);
-        verify(redisAdmissionGateway, times(2)).tryAdmit(1, 1, 101, 30);
-        verify(transactionService).createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30);
-        verify(transactionService, never()).markFallbackAndCreate(1, 1, 101, "attempt-101", 30);
-    }
-
-    @Test
-    void should_not_switch_to_db_fallback_on_transient_redis_command_timeout_after_retry() {
-        BookingJpaRepository repository = mock(BookingJpaRepository.class);
-        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
-        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
-        BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2),
-                repository,
-                redisAdmissionGateway,
-                transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2)),
-                Duration.ofSeconds(1)
-        );
-        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
-        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenThrow(new QueryTimeoutException("transient redis timeout"))
-                .thenThrow(new QueryTimeoutException("transient redis timeout"));
-        when(redisAdmissionGateway.ping()).thenReturn(true);
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
 
         AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
 
         assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
-        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS);
-        verify(redisAdmissionGateway, times(2)).tryAdmit(1, 1, 101, 30);
-        verify(transactionService, never()).markFallbackAndCreate(1, 1, 101, "attempt-101", 30);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway).probeRecovery();
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 101, 30);
         verifyNoInteractions(transactionService);
     }
 
     @Test
-    void should_switch_to_db_fallback_when_repeated_timeout_and_redis_health_fails() {
+    void should_reopen_paused_gate_after_cache_ttl_only_after_half_open_probe_succeeds() throws Exception {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2),
+                BookingApplicationServiceTest.propertiesWithBulkhead(
+                        6, 5, 1, 2, 16, Duration.ofMillis(1)
+                ),
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2)),
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(
+                        6, 5, 1, 2, 16, Duration.ofMillis(1)
+                )),
+                Duration.ofMillis(1)
+        );
+        when(repository.gateMode(1, 1))
+                .thenReturn(GateMode.REDIS)
+                .thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        when(redisAdmissionGateway.probeRecovery()).thenReturn(true);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 102, 30))
+                .thenReturn(new RedisAdmissionGateway.Result(false, 0));
+
+        AdmissionDecision paused = service.admit(1, 1, 101, "attempt-101");
+        Thread.sleep(5);
+        AdmissionDecision reopened = service.admit(1, 1, 102, "attempt-102");
+
+        assertThat(paused.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(reopened.gateMode()).isEqualTo(GateMode.REDIS);
+        assertThat(reopened.result()).isEqualTo(AdmissionResult.REJECTED);
+        verify(redisAdmissionGateway).probeRecovery();
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+        verify(transactionService).markRedisRecovered(1, 1);
+        verify(redisAdmissionGateway).tryAdmit(1, 1, 102, 30);
+    }
+
+    @Test
+    void should_reopen_after_detected_redis_failover_when_half_open_probe_succeeds() throws Exception {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 16, Duration.ofMillis(1)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofMillis(1)
+        );
+        when(repository.gateMode(1, 1))
+                .thenReturn(GateMode.REDIS)
+                .thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        when(redisAdmissionGateway.probeRecovery()).thenReturn(true);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 102, 30))
+                .thenReturn(new RedisAdmissionGateway.Result(false, 0));
+
+        AdmissionDecision paused = service.admit(1, 1, 101, "attempt-101");
+        Thread.sleep(5);
+        AdmissionDecision reopened = service.admit(1, 1, 102, "attempt-102");
+
+        assertThat(paused.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(reopened.gateMode()).isEqualTo(GateMode.REDIS);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+        verify(transactionService).markRedisRecovered(1, 1);
+        verify(redisAdmissionGateway).probeRecovery();
+        verify(redisAdmissionGateway).tryAdmit(1, 1, 102, 30);
+    }
+
+    @Test
+    void should_keep_paused_after_cache_ttl_when_half_open_probe_fails() throws Exception {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 16, Duration.ofMillis(1)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofMillis(1)
+        );
+        when(repository.gateMode(1, 1))
+                .thenReturn(GateMode.REDIS)
+                .thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        when(redisAdmissionGateway.probeRecovery())
+                .thenThrow(new QueryTimeoutException("redis still timed out"));
+
+        AdmissionDecision paused = service.admit(1, 1, 101, "attempt-101");
+        Thread.sleep(5);
+        AdmissionDecision stillPaused = service.admit(1, 1, 102, "attempt-102");
+
+        assertThat(paused.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(stillPaused.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(stillPaused.result()).isEqualTo(AdmissionResult.REJECTED);
+        verify(redisAdmissionGateway).probeRecovery();
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 102, 30);
+        verify(transactionService, never()).markRedisRecovered(1, 1);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_not_probe_again_before_local_pause_retry_after_expires() throws Exception {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 16, Duration.ofMillis(100)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofMillis(1)
+        );
+        when(repository.gateMode(1, 1))
+                .thenReturn(GateMode.REDIS)
+                .thenReturn(GateMode.REDIS_FAILOVER_PAUSED);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        when(redisAdmissionGateway.probeRecovery())
+                .thenThrow(new QueryTimeoutException("redis still timed out"));
+
+        service.admit(1, 1, 101, "attempt-101");
+        Thread.sleep(5);
+        AdmissionDecision failedProbe = service.admit(1, 1, 102, "attempt-102");
+        AdmissionDecision suppressed = service.admit(1, 1, 103, "attempt-103");
+
+        assertThat(failedProbe.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(suppressed.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, never()).probeRecovery();
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 103, 30);
+        verify(repository, times(1)).gateMode(1, 1);
+    }
+
+    @Test
+    void should_pause_on_first_redis_timeout_without_request_path_retry_or_ping() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(
+                        6, 5, 1, 2, 1, Duration.ofSeconds(2)
+                ),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(
+                        6, 5, 1, 2, 1, Duration.ofSeconds(2)
+                )),
                 Duration.ofSeconds(1)
         );
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
         when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenThrow(new QueryTimeoutException("redis timed out"))
-                .thenThrow(new QueryTimeoutException("redis timed out"));
-        when(redisAdmissionGateway.ping()).thenReturn(false);
-        when(transactionService.markFallbackAndCreate(1, 1, 101, "attempt-101", 30))
-                .thenReturn(AdmissionDecision.admitted(10, 1, null, 1, GateMode.DB_FALLBACK));
+                .thenThrow(new RedisSystemException("transient redis timeout", new RuntimeException("timeout")));
 
         AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
 
-        assertThat(decision.result()).isEqualTo(AdmissionResult.ADMITTED);
-        assertThat(decision.gateMode()).isEqualTo(GateMode.DB_FALLBACK);
-        verify(redisAdmissionGateway, times(2)).tryAdmit(1, 1, 101, 30);
-        verify(redisAdmissionGateway).ping();
-        verify(transactionService).markFallbackAndCreate(1, 1, 101, "attempt-101", 30);
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, times(1)).tryAdmit(1, 1, 101, 30);
+        verify(redisAdmissionGateway, never()).ping();
+        verify(transactionService, never()).createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_pause_without_retry_when_redis_replication_is_not_confirmed() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 1, Duration.ofSeconds(2)
+        );
+        BookingAdmissionService service = new BookingAdmissionService(
+                properties,
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(properties),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new RedisAdmissionGateway.ReplicationNotConfirmedException(1, 0));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, times(1)).tryAdmit(1, 1, 101, 30);
+        verify(transactionService, never()).createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_pause_when_redis_timeout_without_waiting_for_replication_retry() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("transient redis timeout"));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, times(1)).tryAdmit(1, 1, 101, 30);
+        verify(redisAdmissionGateway, never()).ping();
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_open_local_pause_circuit_on_transient_redis_command_timeout() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("transient redis timeout"));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, times(1)).tryAdmit(1, 1, 101, 30);
+        verify(redisAdmissionGateway, never()).ping();
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_not_pause_redis_gate_when_mysql_admission_persistence_fails() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenReturn(new RedisAdmissionGateway.Result(true, 1));
+        when(transactionService.createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30))
+                .thenThrow(new DataAccessResourceFailureException("mysql unavailable"));
+
+        assertThatThrownBy(() -> service.admit(1, 1, 101, "attempt-101"))
+                .isInstanceOf(DataAccessResourceFailureException.class);
+
+        verify(redisAdmissionGateway).tryAdmit(1, 1, 101, 30);
+        verify(transactionService, times(3))
+                .createAdmission(1, 1, 101, "attempt-101", GateMode.REDIS, 1L, 30);
+        verify(transactionService, never()).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_reject_next_request_from_local_pause_circuit_without_calling_redis() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+        AdmissionDecision next = service.admit(1, 1, 102, "attempt-102");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        assertThat(next.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(next.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(redisAdmissionGateway, times(1)).tryAdmit(1, 1, 101, 30);
+        verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 102, 30);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
+    }
+
+    @Test
+    void should_return_paused_when_pause_marker_write_is_busy() {
+        BookingJpaRepository repository = mock(BookingJpaRepository.class);
+        RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
+        AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingAdmissionService service = new BookingAdmissionService(
+                BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2),
+                repository,
+                redisAdmissionGateway,
+                transactionService,
+                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 5, 1, 2)),
+                Duration.ofSeconds(1)
+        );
+        when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
+        when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
+                .thenThrow(new QueryTimeoutException("redis timed out"));
+        org.mockito.Mockito.doThrow(new BusinessException(BookingErrorCode.SERVICE_BUSY))
+                .when(transactionService)
+                .markRedisFailoverPaused(1, 1);
+
+        AdmissionDecision decision = service.admit(1, 1, 101, "attempt-101");
+
+        assertThat(decision.result()).isEqualTo(AdmissionResult.REJECTED);
+        assertThat(decision.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+        verify(transactionService).markRedisFailoverPaused(1, 1);
     }
 
     @Test
@@ -192,43 +456,42 @@ class BookingAdmissionServiceTest {
         BookingJpaRepository repository = mock(BookingJpaRepository.class);
         RedisAdmissionGateway redisAdmissionGateway = mock(RedisAdmissionGateway.class);
         AdmissionTransactionService transactionService = mock(AdmissionTransactionService.class);
+        BookingProperties properties = BookingApplicationServiceTest.propertiesWithBulkhead(
+                6, 5, 1, 2, 1, Duration.ofSeconds(2)
+        );
         BookingAdmissionService service = new BookingAdmissionService(
-                BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2),
+                properties,
                 repository,
                 redisAdmissionGateway,
                 transactionService,
-                new BookingDbWriteBulkhead(BookingApplicationServiceTest.propertiesWithBulkhead(6, 2, 5, 1, 2)),
+                new BookingDbWriteBulkhead(properties),
                 Duration.ofSeconds(1)
         );
-        CountDownLatch retryStarted = new CountDownLatch(1);
-        CountDownLatch releaseRetry = new CountDownLatch(1);
+        CountDownLatch redisCallStarted = new CountDownLatch(1);
+        CountDownLatch releaseRedisCall = new CountDownLatch(1);
         when(repository.gateMode(1, 1)).thenReturn(GateMode.REDIS);
         when(redisAdmissionGateway.tryAdmit(1, 1, 101, 30))
-                .thenThrow(new QueryTimeoutException("redis timed out"))
                 .thenAnswer(ignored -> {
-                    retryStarted.countDown();
-                    releaseRetry.await(5, TimeUnit.SECONDS);
-                    throw new QueryTimeoutException("redis still timed out");
+                    redisCallStarted.countDown();
+                    releaseRedisCall.await(5, TimeUnit.SECONDS);
+                    throw new QueryTimeoutException("redis timed out");
                 });
-        when(redisAdmissionGateway.tryAdmit(1, 1, 102, 30))
-                .thenThrow(new QueryTimeoutException("redis timed out"));
-        when(redisAdmissionGateway.ping()).thenReturn(false);
-        when(transactionService.markFallbackAndCreate(1, 1, 101, "attempt-101", 30))
-                .thenReturn(AdmissionDecision.admitted(10, 1, null, 1, GateMode.DB_FALLBACK));
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             var diagnosing = executor.submit(() -> service.admit(1, 1, 101, "attempt-101"));
-            assertThat(retryStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(redisCallStarted.await(5, TimeUnit.SECONDS)).isTrue();
 
             AdmissionDecision parallel = service.admit(1, 1, 102, "attempt-102");
 
             assertThat(parallel.result()).isEqualTo(AdmissionResult.REJECTED);
-            assertThat(parallel.gateMode()).isEqualTo(GateMode.REDIS);
-            verify(transactionService, never()).markFallbackAndCreate(1, 1, 102, "attempt-102", 30);
+            assertThat(parallel.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
 
-            releaseRetry.countDown();
+            releaseRedisCall.countDown();
             AdmissionDecision fallback = diagnosing.get(5, TimeUnit.SECONDS);
-            assertThat(fallback.gateMode()).isEqualTo(GateMode.DB_FALLBACK);
+            assertThat(fallback.result()).isEqualTo(AdmissionResult.REJECTED);
+            assertThat(fallback.gateMode()).isEqualTo(GateMode.REDIS_FAILOVER_PAUSED);
+            verify(redisAdmissionGateway, never()).tryAdmit(1, 1, 102, 30);
+            verify(transactionService).markRedisFailoverPaused(1, 1);
         }
     }
 }
