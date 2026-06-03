@@ -14,6 +14,8 @@ import com.peakbooking.booking.infrastructure.persistence.IdempotencyRecord;
 import com.peakbooking.booking.infrastructure.persistence.AdmissionRecord;
 import com.peakbooking.booking.infrastructure.persistence.ReservationCreationResult;
 import com.peakbooking.booking.infrastructure.persistence.ReservationRecord;
+import com.peakbooking.booking.payment.PaymentExecutionComponent;
+import com.peakbooking.booking.payment.PaymentExecutionPlan;
 import com.peakbooking.common.exception.BusinessException;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -229,7 +231,8 @@ public class BookingTransactionService {
     public PaymentPreparationResult createHeldAndPayment(
             long admissionId,
             String bookingAttemptId,
-            BookingCommand command
+            BookingCommand command,
+            PaymentExecutionPlan paymentExecutionPlan
     ) {
         repository.attachAttemptToAdmission(admissionId, bookingAttemptId);
         Optional<AdmissionRecord> admission = repository.findAdmissionRecord(admissionId);
@@ -273,23 +276,39 @@ public class BookingTransactionService {
             return PaymentPreparationResult.existing(reservationCreation.get().reservationId());
         }
         long reservationId = reservationCreation.get().reservationId();
-        long pointAmount = command.paymentPlan().amountOf(PaymentMethodType.Y_POINT);
+        long pointAmount = paymentExecutionPlan.pointAmount();
         if (!repository.holdPoints(command.userId(), bookingAttemptId, pointAmount)) {
             ReservationRecord reservation = repository.findReservationForUpdate(reservationId).orElseThrow();
             repository.releaseReservation(reservation, "POINTS_NOT_ENOUGH", LocalDateTime.now(clock));
-            throw new BusinessException(BookingErrorCode.POINTS_NOT_ENOUGH);
+            BookingResult result = new BookingResult(
+                    422,
+                    "POINTS_NOT_ENOUGH",
+                    bookingAttemptId,
+                    reservationId,
+                    "RELEASED",
+                    "FAILED",
+                    false,
+                    "NONE",
+                    "Y points are not enough"
+            );
+            repository.completeIdempotency(bookingAttemptId, result);
+            return PaymentPreparationResult.failed(result);
         }
+        PaymentExecutionComponent paymentComponent = paymentExecutionPlan.externalComponent()
+                .orElseGet(() -> PaymentExecutionComponent.internalLedger(PaymentMethodType.Y_POINT, pointAmount));
+        LocalDateTime holdExpiresAt = now.plus(properties.holdTimeout());
         boolean paymentCreated = repository.createPaymentAttempt(
                 bookingAttemptId,
                 reservationId,
-                primaryMethod(command).name(),
-                command.totalAmount() - pointAmount,
-                bookingAttemptId
+                paymentComponent.methodType().name(),
+                paymentComponent.amount(),
+                providerOrderId(paymentComponent, bookingAttemptId),
+                nextReconcileAt(now, holdExpiresAt)
         );
         if (!paymentCreated) {
             return PaymentPreparationResult.existing(reservationId);
         }
-        return PaymentPreparationResult.created(reservationId);
+        return PaymentPreparationResult.created(reservationId, paymentExecutionPlan.externalComponent().orElse(null));
     }
 
     @Transactional
@@ -435,14 +454,21 @@ public class BookingTransactionService {
         repository.markManualReviewAfterWindow(LocalDateTime.now(clock));
     }
 
-    private PaymentMethodType primaryMethod(BookingCommand command) {
-        if (command.paymentPlan().has(PaymentMethodType.CREDIT_CARD)) {
-            return PaymentMethodType.CREDIT_CARD;
+    private String providerOrderId(PaymentExecutionComponent component, String bookingAttemptId) {
+        if (component.providerOrderId() != null) {
+            return component.providerOrderId();
         }
-        if (command.paymentPlan().has(PaymentMethodType.Y_PAY)) {
-            return PaymentMethodType.Y_PAY;
+        return bookingAttemptId + ":" + component.methodType().name();
+    }
+
+    private LocalDateTime nextReconcileAt(LocalDateTime now, LocalDateTime holdExpiresAt) {
+        LocalDateTime candidate = now
+                .plus(properties.payment().callTimeout())
+                .plus(properties.payment().confirmRecoveryGrace());
+        if (holdExpiresAt != null && holdExpiresAt.isBefore(candidate)) {
+            return holdExpiresAt;
         }
-        return PaymentMethodType.Y_POINT;
+        return candidate;
     }
 
     private BookingResult storedReplay(IdempotencyRecord record) {

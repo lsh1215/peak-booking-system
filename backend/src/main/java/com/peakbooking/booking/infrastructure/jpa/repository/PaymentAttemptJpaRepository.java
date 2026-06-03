@@ -18,9 +18,13 @@ public interface PaymentAttemptJpaRepository extends JpaRepository<PaymentAttemp
             UPDATE PaymentAttemptEntity payment
             SET payment.status = :status,
                 payment.confirmStartedAt = COALESCE(payment.confirmStartedAt, :now),
-                payment.nextReconcileAt = COALESCE(payment.nextReconcileAt, :nextReconcileAt)
+                payment.nextReconcileAt = :nextReconcileAt,
+                payment.leaseUntil = NULL,
+                payment.leaseToken = NULL,
+                payment.leaseOwner = NULL
             WHERE payment.bookingAttemptId = :bookingAttemptId
               AND payment.status = com.peakbooking.booking.domain.PaymentAttemptStatus.REQUESTED
+              AND (payment.leaseUntil IS NULL OR payment.leaseUntil < :now)
             """)
     int markConfirming(
             @Param("bookingAttemptId") String bookingAttemptId,
@@ -130,10 +134,14 @@ public interface PaymentAttemptJpaRepository extends JpaRepository<PaymentAttemp
     @Query("""
             SELECT COUNT(payment)
             FROM PaymentAttemptEntity payment
-            WHERE payment.bookingAttemptId = :bookingAttemptId AND payment.leaseToken = :leaseToken
+            WHERE payment.bookingAttemptId = :bookingAttemptId
+              AND payment.leaseToken = :leaseToken
+              AND payment.leaseUntil IS NOT NULL
+              AND payment.leaseUntil >= :now
             """)
     long countByBookingAttemptIdAndLeaseToken(
             @Param("bookingAttemptId") String bookingAttemptId,
-            @Param("leaseToken") String leaseToken
+            @Param("leaseToken") String leaseToken,
+            @Param("now") LocalDateTime now
     );
 }

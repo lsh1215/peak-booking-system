@@ -10,6 +10,8 @@ import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
 import com.peakbooking.booking.payment.PaymentConfirmResult;
 import com.peakbooking.booking.payment.PaymentConfirmStatus;
 import com.peakbooking.booking.payment.PaymentCallGuard;
+import com.peakbooking.booking.payment.PaymentExecutionPlan;
+import com.peakbooking.booking.payment.PaymentProcessorRegistry;
 import com.peakbooking.common.exception.BusinessException;
 import java.time.Clock;
 import java.time.Duration;
@@ -32,6 +34,7 @@ public class BookingApplicationService {
     private final BookingTransactionService transactionService;
     private final BookingDbWriteBulkhead dbWriteBulkhead;
     private final PaymentCallGuard paymentCallGuard;
+    private final PaymentProcessorRegistry paymentProcessorRegistry;
     private final Clock clock;
     private final Duration productCacheTtl;
     private final ConcurrentMap<Long, CachedProductSummary> productCache = new ConcurrentHashMap<>();
@@ -46,6 +49,7 @@ public class BookingApplicationService {
             BookingTransactionService transactionService,
             BookingDbWriteBulkhead dbWriteBulkhead,
             PaymentCallGuard paymentCallGuard,
+            PaymentProcessorRegistry paymentProcessorRegistry,
             Clock clock,
             @Value("${peak-booking.product-cache-ttl:1s}") Duration productCacheTtl
     ) {
@@ -58,6 +62,7 @@ public class BookingApplicationService {
         this.transactionService = transactionService;
         this.dbWriteBulkhead = dbWriteBulkhead;
         this.paymentCallGuard = paymentCallGuard;
+        this.paymentProcessorRegistry = paymentProcessorRegistry;
         this.clock = clock;
         this.productCacheTtl = productCacheTtl;
     }
@@ -80,6 +85,10 @@ public class BookingApplicationService {
             throw new BusinessException(BookingErrorCode.SALE_NOT_OPEN);
         }
         combinationPolicy.validate(command.paymentPlan(), product.priceAmount());
+        PaymentExecutionPlan paymentExecutionPlan = paymentProcessorRegistry.plan(
+                command.paymentPlan(),
+                token.attemptId()
+        );
 
         AdmissionDecision admission = admissionService.admit(
                 command.saleEventId(),
@@ -111,7 +120,8 @@ public class BookingApplicationService {
         PaymentPreparationResult preparation = dbWriteBulkhead.execute(() -> transactionService.createHeldAndPayment(
                 admission.admissionId(),
                 token.attemptId(),
-                command
+                command,
+                paymentExecutionPlan
         ));
         if (preparation.status() == PaymentPreparationResult.Status.WAITING) {
             return dbWriteBulkhead.execute(() -> transactionService.waiting(token.attemptId(), admission.admissionId()));
@@ -125,12 +135,23 @@ public class BookingApplicationService {
         if (preparation.status() == PaymentPreparationResult.Status.EXISTING_IN_PROGRESS) {
             return dbWriteBulkhead.execute(() -> transactionService.currentState(token.attemptId()));
         }
+        if (preparation.status() == PaymentPreparationResult.Status.FAILED) {
+            return preparation.terminalResult();
+        }
 
-        String providerOrderId = token.attemptId();
+        long reservationId = preparation.reservationId();
+        if (!preparation.requiresExternalConfirmation()) {
+            return dbWriteBulkhead.execute(() -> transactionService.confirm(
+                    token.attemptId(),
+                    reservationId,
+                    null
+            ));
+        }
+
+        String providerOrderId = preparation.externalComponent().providerOrderId();
         if (!dbWriteBulkhead.execute(() -> transactionService.markPaymentConfirming(token.attemptId()))) {
             return dbWriteBulkhead.execute(() -> transactionService.currentState(token.attemptId()));
         }
-        long reservationId = preparation.reservationId();
         PaymentConfirmResult payment = paymentCallGuard.confirm(providerOrderId, token.attemptId(), command);
         if (payment.status() == PaymentConfirmStatus.SUCCESS) {
             return dbWriteBulkhead.execute(() -> transactionService.confirm(

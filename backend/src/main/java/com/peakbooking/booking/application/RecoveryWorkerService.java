@@ -100,7 +100,7 @@ public class RecoveryWorkerService {
                 && !reservation.unknownInventoryDeadlineAt().isAfter(LocalDateTime.now(clock));
         if (releaseAfterDeadline) {
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     releaseUnknownAfterDeadline(reservation);
                     completeReleasedReplay(reservation, "PAYMENT_UNKNOWN_DEADLINE_EXPIRED");
                 }
@@ -111,7 +111,7 @@ public class RecoveryWorkerService {
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
                 PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "reservation released after deadline");
                 transactionTemplate.execute(status -> {
-                    if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                    if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                         if (cancel.status() == PaymentStatus.CANCELLED) {
                             repository.markCancelledAfterRelease(reservation.bookingAttemptId());
                         } else {
@@ -127,7 +127,7 @@ public class RecoveryWorkerService {
         PaymentAttemptRecord payment = claim.paymentAttempt();
         PaymentStatusResult paymentStatus = queryPayment(payment);
         transactionTemplate.execute(status -> {
-            if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+            if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                 applyPaymentStatusBeforeDeadline(reservation, payment, paymentStatus);
             }
             return null;
@@ -137,11 +137,30 @@ public class RecoveryWorkerService {
     private void recoverHeld(RecoveryClaim claim) {
         ReservationRecord reservation = claim.reservation();
         PaymentAttemptRecord payment = claim.paymentAttempt();
+        if (payment.status() == PaymentAttemptStatus.REQUESTED && payment.confirmStartedAt() == null) {
+            transactionTemplate.execute(status -> {
+                if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                    ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
+                    if (locked.status() == ReservationStatus.HELD) {
+                        repository.releaseReservation(
+                                locked,
+                                "PAYMENT_CONFIRM_NOT_STARTED",
+                                LocalDateTime.now(clock)
+                        );
+                        repository.releasePoints(locked.bookingAttemptId());
+                        repository.markPaymentFailed(locked.bookingAttemptId(), "PAYMENT_CONFIRM_NOT_STARTED");
+                        completeFailedReplay(locked, "PAYMENT_CONFIRM_NOT_STARTED");
+                    }
+                }
+                return null;
+            });
+            return;
+        }
         boolean pgMayHaveBeenCalled = payment.status() == PaymentAttemptStatus.CONFIRMING
                 || payment.confirmStartedAt() != null;
         if (!pgMayHaveBeenCalled) {
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     releaseExpiredHeldInTransaction(reservation.id());
                     completeReleasedReplay(reservation, "HELD_EXPIRED");
                 }
@@ -154,7 +173,7 @@ public class RecoveryWorkerService {
         boolean afterDeadline = reservation.holdExpiresAt() == null || !reservation.holdExpiresAt().isAfter(now);
         if (afterDeadline) {
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                     ReservationRecord locked = repository.findReservationForUpdate(reservation.id()).orElseThrow();
                     if (locked.status() == ReservationStatus.HELD) {
                         repository.releaseReservation(locked, "HELD_CONFIRM_DEADLINE_EXPIRED", LocalDateTime.now(clock));
@@ -173,7 +192,7 @@ public class RecoveryWorkerService {
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
                 PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "held reservation released after deadline");
                 transactionTemplate.execute(status -> {
-                    if (repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+                    if (leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                         if (cancel.status() == PaymentStatus.CANCELLED) {
                             repository.markCancelledAfterRelease(reservation.bookingAttemptId());
                         } else {
@@ -188,7 +207,7 @@ public class RecoveryWorkerService {
 
         PaymentStatusResult paymentStatus = queryPayment(payment);
         transactionTemplate.execute(status -> {
-            if (!repository.leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
+            if (!leaseTokenMatches(reservation.bookingAttemptId(), claim.leaseToken())) {
                 return null;
             }
             if (paymentStatus.status() == PaymentStatus.APPROVED) {
@@ -280,7 +299,7 @@ public class RecoveryWorkerService {
         if (paymentStatus.status() == PaymentStatus.APPROVED) {
             PaymentStatusResult cancel = cancelPayment(payment, paymentStatus, "released reservation payment reconciliation");
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
                     if (cancel.status() == PaymentStatus.CANCELLED) {
                         repository.markCancelledAfterRelease(payment.bookingAttemptId());
                     } else {
@@ -296,7 +315,7 @@ public class RecoveryWorkerService {
         }
         if (paymentStatus.status() == PaymentStatus.CANCELLED) {
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
                     repository.markCancelledAfterRelease(payment.bookingAttemptId());
                 }
                 return null;
@@ -305,7 +324,7 @@ public class RecoveryWorkerService {
         }
         if (paymentStatus.status() == PaymentStatus.FAILED) {
             transactionTemplate.execute(status -> {
-                if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+                if (leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
                     repository.markPaymentFailed(payment.bookingAttemptId(), "RELEASED_PAYMENT_FAILED");
                 }
                 return null;
@@ -314,7 +333,7 @@ public class RecoveryWorkerService {
         }
 
         transactionTemplate.execute(status -> {
-            if (repository.leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
+            if (leaseTokenMatches(payment.bookingAttemptId(), claim.leaseToken())) {
                 repository.scheduleNextReconcile(
                         payment.bookingAttemptId(),
                         nextReconcileAt(now, payment.activeReconcileUntil()),
@@ -338,6 +357,25 @@ public class RecoveryWorkerService {
                 reason
         );
         repository.completeIdempotencyIfExists(reservation.bookingAttemptId(), result);
+    }
+
+    private void completeFailedReplay(ReservationRecord reservation, String reason) {
+        BookingResult result = new BookingResult(
+                422,
+                reason,
+                reservation.bookingAttemptId(),
+                reservation.id(),
+                "RELEASED",
+                "FAILED",
+                false,
+                "NONE",
+                "Payment did not start"
+        );
+        repository.completeIdempotencyIfExists(reservation.bookingAttemptId(), result);
+    }
+
+    private boolean leaseTokenMatches(String bookingAttemptId, String leaseToken) {
+        return repository.leaseTokenMatches(bookingAttemptId, leaseToken, LocalDateTime.now(clock));
     }
 
     private PaymentStatusResult queryPayment(PaymentAttemptRecord payment) {

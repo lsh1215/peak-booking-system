@@ -352,7 +352,8 @@ public class BookingJpaRepository {
             long reservationId,
             String methodType,
             long amount,
-            String providerOrderId
+            String providerOrderId,
+            LocalDateTime nextReconcileAt
     ) {
         try {
             paymentAttemptRepository.saveAndFlush(PaymentAttemptEntity.requested(
@@ -360,7 +361,8 @@ public class BookingJpaRepository {
                     reservationId,
                     methodType,
                     amount,
-                    providerOrderId
+                    providerOrderId,
+                    nextReconcileAt
             ));
             return true;
         } catch (DataIntegrityViolationException ignored) {
@@ -427,9 +429,12 @@ public class BookingJpaRepository {
         if (pointAmount == 0) {
             return true;
         }
-        Long accountId = pointAccountRepository.findIdByUserId(userId).orElseThrow();
+        Optional<Long> accountId = pointAccountRepository.findIdByUserId(userId);
+        if (accountId.isEmpty()) {
+            return false;
+        }
         try {
-            pointHoldRepository.saveAndFlush(PointHoldEntity.held(bookingAttemptId, accountId, pointAmount));
+            pointHoldRepository.saveAndFlush(PointHoldEntity.held(bookingAttemptId, accountId.get(), pointAmount));
         } catch (DataIntegrityViolationException ignored) {
             return true;
         }
@@ -523,6 +528,13 @@ public class BookingJpaRepository {
                     (r.status = 'HELD' AND r.hold_expires_at <= :now)
                     OR (
                         r.status = 'HELD'
+                        AND p.status = 'REQUESTED'
+                        AND p.confirm_started_at IS NULL
+                        AND p.next_reconcile_at IS NOT NULL
+                        AND p.next_reconcile_at <= :now
+                    )
+                    OR (
+                        r.status = 'HELD'
                         AND p.status = 'CONFIRMING'
                         AND p.next_reconcile_at IS NOT NULL
                         AND p.next_reconcile_at <= :now
@@ -565,8 +577,8 @@ public class BookingJpaRepository {
         return claims;
     }
 
-    public boolean leaseTokenMatches(String bookingAttemptId, String leaseToken) {
-        return paymentAttemptRepository.countByBookingAttemptIdAndLeaseToken(bookingAttemptId, leaseToken) == 1;
+    public boolean leaseTokenMatches(String bookingAttemptId, String leaseToken, LocalDateTime now) {
+        return paymentAttemptRepository.countByBookingAttemptIdAndLeaseToken(bookingAttemptId, leaseToken, now) == 1;
     }
 
     public void scheduleNextReconcile(String bookingAttemptId, LocalDateTime nextReconcileAt, LocalDateTime now) {

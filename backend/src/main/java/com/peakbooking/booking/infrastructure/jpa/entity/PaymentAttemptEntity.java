@@ -61,7 +61,8 @@ public class PaymentAttemptEntity {
             long reservationId,
             String methodType,
             long amount,
-            String providerOrderId
+            String providerOrderId,
+            LocalDateTime nextReconcileAt
     ) {
         this.bookingAttemptId = bookingAttemptId;
         this.reservationId = reservationId;
@@ -69,6 +70,7 @@ public class PaymentAttemptEntity {
         this.methodType = methodType;
         this.amount = amount;
         this.providerOrderId = providerOrderId;
+        this.nextReconcileAt = nextReconcileAt;
     }
 
     public static PaymentAttemptEntity requested(
@@ -76,9 +78,17 @@ public class PaymentAttemptEntity {
             long reservationId,
             String methodType,
             long amount,
-            String providerOrderId
+            String providerOrderId,
+            LocalDateTime nextReconcileAt
     ) {
-        return new PaymentAttemptEntity(bookingAttemptId, reservationId, methodType, amount, providerOrderId);
+        return new PaymentAttemptEntity(
+                bookingAttemptId,
+                reservationId,
+                methodType,
+                amount,
+                providerOrderId,
+                nextReconcileAt
+        );
     }
 
     public Long getId() {

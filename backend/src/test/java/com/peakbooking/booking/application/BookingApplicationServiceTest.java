@@ -15,7 +15,11 @@ import com.peakbooking.booking.domain.PaymentMethodType;
 import com.peakbooking.booking.domain.PaymentPlan;
 import com.peakbooking.booking.domain.PaymentPlanLine;
 import com.peakbooking.booking.infrastructure.jpa.BookingJpaRepository;
+import com.peakbooking.booking.payment.CreditCardPaymentProcessor;
 import com.peakbooking.booking.payment.PaymentCallGuard;
+import com.peakbooking.booking.payment.PaymentProcessorRegistry;
+import com.peakbooking.booking.payment.YPayPaymentProcessor;
+import com.peakbooking.booking.payment.YPointPaymentProcessor;
 import com.peakbooking.common.exception.BusinessException;
 import java.time.Clock;
 import java.time.Duration;
@@ -59,6 +63,11 @@ class BookingApplicationServiceTest {
                 transactionService,
                 new BookingDbWriteBulkhead(properties),
                 paymentCallGuard,
+                new PaymentProcessorRegistry(List.of(
+                        new CreditCardPaymentProcessor(),
+                        new YPayPaymentProcessor(),
+                        new YPointPaymentProcessor()
+                )),
                 clock,
                 Duration.ofSeconds(1)
         );
